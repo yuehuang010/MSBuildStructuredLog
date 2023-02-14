@@ -9,6 +9,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
     {
         private readonly Build build;
         private readonly DoubleWritesAnalyzer doubleWritesAnalyzer;
+        private readonly DoubleBuildAnalyzer doubleBuildAnalyzer;
         private readonly ResolveAssemblyReferenceAnalyzer resolveAssemblyReferenceAnalyzer;
         private readonly CppAnalyzer cppAnalyzer;
         private readonly Dictionary<string, (TimeSpan TotalDuration, Dictionary<string, TimeSpan> ParentDurations)> taskDurations
@@ -23,6 +24,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             doubleWritesAnalyzer = new DoubleWritesAnalyzer();
             resolveAssemblyReferenceAnalyzer = new ResolveAssemblyReferenceAnalyzer();
             cppAnalyzer = new CppAnalyzer();
+            doubleBuildAnalyzer = new DoubleBuildAnalyzer();
         }
 
         public static void AnalyzeBuild(Build build)
@@ -197,6 +199,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             build.AddChild(new Property { Name = Intern(Strings.Duration), Value = Intern(build.DurationText) });
 
             doubleWritesAnalyzer.AppendDoubleWritesFolder(build);
+            doubleBuildAnalyzer.AppendDoubleBuildFolder(build);
             resolveAssemblyReferenceAnalyzer.AppendFinalReport(build);
             cppAnalyzer.AppendCppAnalyzer(build);
 
@@ -312,6 +315,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
                     }
                 }
             }
+
+            doubleBuildAnalyzer.AddProject(project);
         }
 
         private void AnalyzeTask(Task task)

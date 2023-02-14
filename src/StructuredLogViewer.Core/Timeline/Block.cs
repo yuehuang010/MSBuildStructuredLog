@@ -5,6 +5,7 @@ using Microsoft.Build.Logging.StructuredLogger;
 
 namespace StructuredLogViewer
 {
+    [DebuggerDisplay("{Node.ToString()}")]
     public class Block
     {
         public string Text { get; set; }

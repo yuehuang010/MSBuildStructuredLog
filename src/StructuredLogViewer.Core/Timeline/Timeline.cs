@@ -16,54 +16,70 @@ namespace StructuredLogViewer
 
         private void Populate(Build build, bool analyzeCpp = false)
         {
-            build.VisitAllChildren<TimedNode>(node =>
+            foreach (var node in build.Children)
             {
-                if (node is Build)
+                if (node is Folder folder && folder.Name != "Evaluation")
                 {
-                    return;
+                    continue;
                 }
 
-                if (node is Microsoft.Build.Logging.StructuredLogger.Task task &&
-                    (string.Equals(task.Name, "MSBuild", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(task.Name, "CallTarget", StringComparison.OrdinalIgnoreCase)))
+                if (node is TimedNode filteredNode)
                 {
-                    return;
-                }
-
-                var nodeId = node.NodeId;
-                if (!Lanes.TryGetValue(nodeId, out var lane))
-                {
-                    lane = new Lane();
-                    Lanes[nodeId] = lane;
-                }
-
-                lane.Add(CreateBlock(node));
-            });
-
-            if (analyzeCpp)
-            {
-                build.VisitAllChildren<CppAnalyzer.CppAnalyzerNode>(cppAnalyzerNode =>
-                {
-                    var cppAnalyzer = cppAnalyzerNode.GetCppAnalyzer();
-                    var cppTimedNodes = cppAnalyzer.GetAnalyzedTimedNode();
-
-                    foreach (var cppTimedNode in cppTimedNodes)
+                    filteredNode.VisitAllChildren<TimedNode>(timedNode =>
                     {
-                        // cppAnalyzer shouldn't create any new lanes.
-                        if (Lanes.TryGetValue(cppTimedNode.NodeId, out var lane))
+                        if (timedNode is Build)
                         {
-                            var block = new Block()
-                            {
-                                StartTime = cppTimedNode.StartTime,
-                                EndTime = cppTimedNode.EndTime,
-                                Text = cppTimedNode.Text,
-                                Node = cppTimedNode.Node,
-                            };
-                            lane.Add(block);
+                            return;
                         }
+
+                        if (timedNode is Microsoft.Build.Logging.StructuredLogger.Task task &&
+                            (string.Equals(task.Name, "MSBuild", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(task.Name, "CallTarget", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            return;
+                        }
+
+                        AddToLane(timedNode);
+                    });
+
+                    if (analyzeCpp)
+                    {
+                        filteredNode.VisitAllChildren<CppAnalyzer.CppAnalyzerNode>(cppAnalyzerNode =>
+                        {
+                            var cppAnalyzer = cppAnalyzerNode.GetCppAnalyzer();
+                            var cppTimedNodes = cppAnalyzer.GetAnalyzedTimedNode();
+
+                            foreach (var cppTimedNode in cppTimedNodes)
+                            {
+                                // cppAnalyzer shouldn't create any new lanes.
+                                if (Lanes.TryGetValue(cppTimedNode.NodeId, out var lane))
+                                {
+                                    var block = new Block()
+                                    {
+                                        StartTime = cppTimedNode.StartTime,
+                                        EndTime = cppTimedNode.EndTime,
+                                        Text = cppTimedNode.Text,
+                                        Node = cppTimedNode.Node,
+                                    };
+                                    lane.Add(block);
+                                }
+                            }
+                        });
                     }
-                });
+                }
             }
+        }
+
+        private void AddToLane(TimedNode timedNode)
+        {
+            var nodeId = timedNode.NodeId;
+            if (!Lanes.TryGetValue(nodeId, out var lane))
+            {
+                lane = new Lane();
+                Lanes[nodeId] = lane;
+            }
+
+            lane.Add(CreateBlock(timedNode));
         }
 
         private Block CreateBlock(TimedNode node)
