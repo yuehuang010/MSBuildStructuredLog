@@ -218,7 +218,7 @@ namespace Microsoft.Build.UnitTests
 
             var memoryStream = new MemoryStream();
             var binaryWriter = new BinaryWriter(memoryStream);
-            var binaryReader = new BinaryReader(memoryStream);
+            var binaryReader = new BufferedBinaryReader(memoryStream);
             var buildEventArgsWriter = new BuildEventArgsWriter(binaryWriter);
 
             buildEventArgsWriter.Write(error);
@@ -230,9 +230,9 @@ namespace Microsoft.Build.UnitTests
             int positionAfterFirstEvent = (int)memoryStream.Position;
             memoryStream.Position = 0;
             // event type
-            Serialization.Read7BitEncodedInt(binaryReader);
+            binaryReader.Read7BitEncodedInt();
             int eventSizePos = (int)memoryStream.Position;
-            int eventSize = Serialization.Read7BitEncodedInt(binaryReader);
+            int eventSize = binaryReader.Read7BitEncodedInt();
             int positionAfterFirstEventSize = (int)memoryStream.Position;
             memoryStream.Position = eventSizePos;
             // the extra 4 bytes
@@ -282,7 +282,7 @@ namespace Microsoft.Build.UnitTests
 
             var memoryStream = new MemoryStream();
             var binaryWriter = new BinaryWriter(memoryStream);
-            var binaryReader = new BinaryReader(memoryStream);
+            var binaryReader = new BufferedBinaryReader(memoryStream);
             var buildEventArgsWriter = new BuildEventArgsWriter(binaryWriter);
 
             buildEventArgsWriter.Write(error);
@@ -290,7 +290,7 @@ namespace Microsoft.Build.UnitTests
             int positionAfterFirstEvent = (int)memoryStream.Position;
             memoryStream.Position = 0;
             // event type
-            Serialization.Read7BitEncodedInt(binaryReader);
+            binaryReader.Read7BitEncodedInt();
             int eventSizePos = (int)memoryStream.Position;
             memoryStream.Position = 0;
 
@@ -336,7 +336,7 @@ namespace Microsoft.Build.UnitTests
 
             var memoryStream = new MemoryStream();
             var binaryWriter = new BinaryWriter(memoryStream);
-            var binaryReader = new BinaryReader(memoryStream);
+            var binaryReader = new BufferedBinaryReader(memoryStream);
             var buildEventArgsWriter = new BuildEventArgsWriter(binaryWriter);
 
             buildEventArgsWriter.Write(error);
@@ -344,8 +344,8 @@ namespace Microsoft.Build.UnitTests
             int positionAfterFirstEvent = (int)memoryStream.Position;
             memoryStream.Position = 0;
             // event type
-            Serialization.Read7BitEncodedInt(binaryReader);
-            int eventSize = Serialization.Read7BitEncodedInt(binaryReader);
+            binaryReader.Read7BitEncodedInt();
+            int eventSize = binaryReader.Read7BitEncodedInt();
             // overwrite the entire event with garbage
             binaryWriter.Write(Enumerable.Repeat(byte.MaxValue, eventSize).ToArray());
 
@@ -388,7 +388,7 @@ namespace Microsoft.Build.UnitTests
 
             var memoryStream = new MemoryStream();
             var binaryWriter = new BinaryWriter(memoryStream);
-            var binaryReader = new BinaryReader(memoryStream);
+            var binaryReader = new BufferedBinaryReader(memoryStream);
             var buildEventArgsWriter = new BuildEventArgsWriter(binaryWriter);
 
             buildEventArgsWriter.Write(error);
@@ -396,9 +396,9 @@ namespace Microsoft.Build.UnitTests
             int positionAfterFirstEvent = (int)memoryStream.Position;
             memoryStream.Position = 0;
             // event type
-            Serialization.Read7BitEncodedInt(binaryReader);
+            binaryReader.Read7BitEncodedInt();
             int eventSizePos = (int)memoryStream.Position;
-            int eventSize = Serialization.Read7BitEncodedInt(binaryReader);
+            int eventSize = binaryReader.Read7BitEncodedInt();
             int positionAfterFirstEventSize = (int)memoryStream.Position;
             memoryStream.Position = eventSizePos;
             // simulate there are 4 bytes less in the future version of the event - while our reader expects those

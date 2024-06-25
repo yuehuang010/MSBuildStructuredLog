@@ -27,7 +27,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
     /// </summary>
     internal partial class BuildEventArgsReader : IBuildEventArgsReaderNotifications, IDisposable
     {
-        private readonly BinaryReader _binaryReader;
+        private readonly BufferedBinaryReader _binaryReader;
         // This is used to verify that events deserialization is not overreading expected size.
         private readonly TransparentReadStream _readStream;
         private readonly int _fileFormatVersion;
@@ -61,13 +61,13 @@ namespace Microsoft.Build.Logging.StructuredLogger
         /// </summary>
         /// <param name="binaryReader">The <see cref="BinaryReader"/> to read <see cref="BuildEventArgs"/> from.</param>
         /// <param name="fileFormatVersion">The file format version of the log file being read.</param>
-        public BuildEventArgsReader(BinaryReader binaryReader, int fileFormatVersion)
+        public BuildEventArgsReader(BufferedBinaryReader binaryReader, int fileFormatVersion)
         {
             this._readStream = TransparentReadStream.EnsureTransparentReadStream(binaryReader.BaseStream);
             // make sure the reader we're going to use wraps the transparent stream wrapper
             this._binaryReader = binaryReader.BaseStream == _readStream
                 ? binaryReader
-                : new BinaryReader(_readStream);
+                : new BufferedBinaryReader(_readStream);
             this._fileFormatVersion = fileFormatVersion;
         }
 
@@ -335,7 +335,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         private void SkipBytes(int count)
         {
-            _binaryReader.BaseStream.Seek(count, SeekOrigin.Current);
+            _binaryReader.Seek(count, SeekOrigin.Current);
         }
 
         private BinaryLogRecordKind PreprocessRecordsTillNextEvent(Func<BinaryLogRecordKind, bool> isPreprocessRecord)
@@ -653,7 +653,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             if (_fileFormatVersion >= 14)
             {
                 skipReason = (TargetSkipReason)ReadInt32();
-                originalBuildEventContext = _binaryReader.ReadOptionalBuildEventContext();
+                originalBuildEventContext = ReadOptionalBuildEventContext();
                 message = GetTargetSkippedMessage(skipReason, targetName, condition, evaluatedCondition, originallySucceeded);
             }
 
@@ -1795,7 +1795,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
             // this should never happen for valid binlogs
             throw new InvalidDataException(
-                $"String record number {_recordNumber} is invalid: string index {index} is not within {stringRecords.Count}.");
+                $"String record number {_recordNumber} is invalid: string index {index} is not within stringRecords of size {stringRecords.Count}.");
         }
 
         private int ReadInt32()
@@ -1803,7 +1803,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             // on some platforms (net5) this method was added to BinaryReader
             // but it's not available on others. Call our own extension method
             // explicitly to avoid ambiguity.
-            return BinaryReaderExtensions.Read7BitEncodedInt(_binaryReader);
+            return _binaryReader.Read7BitEncodedInt();
         }
 
         private long ReadInt64()
@@ -1838,6 +1838,26 @@ namespace Microsoft.Build.Logging.StructuredLogger
             var inclusiveTime = ReadTimeSpan();
 
             return new ProfiledLocation(inclusiveTime, exclusiveTime, numberOfHits);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private DateTime ReadTimestamp()
+        {
+            long timestampTicks = _binaryReader.ReadInt64();
+            DateTimeKind kind = (DateTimeKind)_binaryReader.ReadInt32();
+            var timestamp = new DateTime(timestampTicks, kind);
+            return timestamp;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private BuildEventContext ReadOptionalBuildEventContext()
+        {
+            if (_binaryReader.ReadByte() == 0)
+            {
+                return null;
+            }
+
+            return ReadBuildEventContext();
         }
 
         private EvaluationLocation ReadEvaluationLocation()
