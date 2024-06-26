@@ -14,18 +14,54 @@ namespace StructuredLogger.Tests
         [Fact]
         public void Test_ReadString()
         {
-            var test = "foobar";
+            var testString = new string[] { "foobar", "catbar", "dogbar" };
             var stream = new MemoryStream();
 
             var writer = new BinaryWriter(stream);
-            writer.Write(test);
+            foreach (string test in testString)
+            {
+                writer.Write(test);
+            }
 
             stream.Position = 0;
 
             var reader = new BufferedBinaryReader(stream);
-            string result = reader.ReadString();
+            foreach (string test in testString)
+            {
+                string result = reader.ReadString();
+                Assert.Equal(test, result);
+            }
+        }
 
-            Assert.Equal(test, result);
+        /// <summary>
+        /// Test ReadString support strings that are larger than the internal buffer.
+        /// </summary>
+        [Fact]
+        public void Test_ReadString_LongString()
+        {
+            var testString = new string[]
+            {
+                "FoobarCatbarDogbarDiveBarSandBar",
+                "FoobarCatbarDogbarDiveBarSandBar2",
+                "FoobarCatbarDogbarDiveBarSandBar3",
+            };
+
+            var stream = new MemoryStream();
+
+            var writer = new BinaryWriter(stream);
+            foreach (string test in testString)
+            {
+                writer.Write(test);
+            }
+
+            stream.Position = 0;
+
+            var reader = new BufferedBinaryReader(stream, bufferCapacity: 10);
+            foreach (string test in testString)
+            {
+                string result = reader.ReadString();
+                Assert.Equal(test, result);
+            }
         }
 
         [Fact]
@@ -65,7 +101,7 @@ namespace StructuredLogger.Tests
         [Fact]
         public void Test_Read7BitEncodedInt_VariedLength()
         {
-            int[] ints = new[] { 0, 1, 10, 254, 255, 256, 500, 1024, 1025, 100_000, 100_000_000, int.MaxValue};
+            int[] ints = new[] { 0, 1, 10, 254, 255, 256, 500, 1024, 1025, 100_000, 100_000_000, int.MaxValue };
             var stream = new MemoryStream();
 
             var writer = new BinaryWriter(stream);
@@ -137,6 +173,28 @@ namespace StructuredLogger.Tests
                 result = reader.Read7BitEncodedInt();
                 Assert.Equal(test, result);
                 test--;
+            }
+        }
+
+        [Fact]
+        public void Test_FillBuffer_ReadString()
+        {
+            var testString = new string[] { "foobar", "catbar", "dogbar" };
+            var stream = new MemoryStream();
+
+            var writer = new BinaryWriter(stream);
+            foreach (string test in testString)
+            {
+                writer.Write(test);
+            }
+
+            stream.Position = 0;
+
+            var reader = new BufferedBinaryReader(stream, bufferCapacity: 10);
+            foreach (string test in testString)
+            {
+                string result = reader.ReadString();
+                Assert.Equal(test, result);
             }
         }
     }

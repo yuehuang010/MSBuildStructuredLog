@@ -28,8 +28,6 @@ namespace Microsoft.Build.Logging.StructuredLogger
     internal partial class BuildEventArgsReader : IBuildEventArgsReaderNotifications, IDisposable
     {
         private readonly BufferedBinaryReader _binaryReader;
-        // This is used to verify that events deserialization is not overreading expected size.
-        private readonly TransparentReadStream _readStream;
         private readonly int _fileFormatVersion;
         private long _recordNumber = 0;
         private bool _skipUnknownEvents;
@@ -63,11 +61,9 @@ namespace Microsoft.Build.Logging.StructuredLogger
         /// <param name="fileFormatVersion">The file format version of the log file being read.</param>
         public BuildEventArgsReader(BufferedBinaryReader binaryReader, int fileFormatVersion)
         {
-            this._readStream = TransparentReadStream.EnsureTransparentReadStream(binaryReader.BaseStream);
+            // this._readStream = TransparentReadStream.EnsureTransparentReadStream(binaryReader.BaseStream);
             // make sure the reader we're going to use wraps the transparent stream wrapper
-            this._binaryReader = binaryReader.BaseStream == _readStream
-                ? binaryReader
-                : new BufferedBinaryReader(_readStream);
+            this._binaryReader = binaryReader;
             this._fileFormatVersion = fileFormatVersion;
         }
 
@@ -77,7 +73,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
         /// </summary>
         public bool CloseInput { private get; set; } = false;
 
-        public long Position => _readStream.Position;
+        public long Position => _binaryReader.Position;
 
         /// <summary>
         /// Indicates whether unknown BuildEvents should be silently skipped. Read returns null otherwise.
@@ -171,6 +167,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
         /// <returns>ArraySegment containing serialized BuildEventArgs record</returns>
         internal RawRecord ReadRaw(bool decodeTextualRecords)
         {
+            return new(BinaryLogRecordKind.Error, null);
+            /*
             // This method is internal and condition is checked once before calling in loop,
             //  so avoiding it here on each call.
             // But keeping it for documentation purposes - in case someone will try to call it and debug issues.
@@ -201,6 +199,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             _recordNumber += 1;
 
             return new(recordKind, stream);
+            */
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -237,7 +236,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 if (_fileFormatVersion >= BinaryLogger.ForwardCompatibilityMinimalVersion)
                 {
                     serializedEventLength = ReadInt32(); // record length
-                    _readStream.BytesCountAllowedToRead = serializedEventLength;
+                    _binaryReader.BytesCountAllowedToRead = serializedEventLength;
                 }
 
                 bool hasError = false;
@@ -251,7 +250,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                     // Thrown when BinaryReader is unable to deserialize binary data into expected type.
                     e is FormatException ||
                     // Thrown when we attempt to read more bytes than what is in the next event chunk.
-                    (e is EndOfStreamException && _readStream.BytesCountAllowedToReadRemaining <= 0))
+                    (e is EndOfStreamException && _binaryReader.BytesCountAllowedToReadRemaining <= 0))
                 {
                     hasError = true;
 
@@ -275,11 +274,11 @@ namespace Microsoft.Build.Logging.StructuredLogger
                     HandleError(ErrorFactory, _skipUnknownEvents, ReaderErrorType.UnknownEventType, recordKind);
                 }
 
-                if (_readStream.BytesCountAllowedToReadRemaining > 0)
+                if (_binaryReader.BytesCountAllowedToReadRemaining > 0)
                 {
                     string ErrorFactory() => string.Format(
                         "BuildEvent record number {0} was expected to read exactly {1} bytes from the stream, but read {2} instead.", _recordNumber, serializedEventLength,
-                        serializedEventLength - _readStream.BytesCountAllowedToReadRemaining);
+                        serializedEventLength - _binaryReader.BytesCountAllowedToReadRemaining);
 
                     HandleError(ErrorFactory, _skipUnknownEventParts, ReaderErrorType.UnknownEventData, recordKind);
                 }
@@ -294,7 +293,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 if (noThrow)
                 {
                     RecoverableReadError?.Invoke(new BinaryLogReaderErrorEventArgs(readerErrorType, recordKind, msgFactory));
-                    SkipBytes(_readStream.BytesCountAllowedToReadRemaining);
+                    SkipBytes(_binaryReader.BytesCountAllowedToReadRemaining);
                 }
                 else
                 {
@@ -340,7 +339,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         private BinaryLogRecordKind PreprocessRecordsTillNextEvent(Func<BinaryLogRecordKind, bool> isPreprocessRecord)
         {
-            _readStream.BytesCountAllowedToRead = null;
+            _binaryReader.BytesCountAllowedToRead = null;
 
             BinaryLogRecordKind recordKind = (BinaryLogRecordKind)ReadInt32();
 
@@ -356,7 +355,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 else if (recordKind == BinaryLogRecordKind.NameValueList)
                 {
                     ReadNameValueList();
-                    _readStream.BytesCountAllowedToRead = null;
+                    _binaryReader.BytesCountAllowedToRead = null;
                 }
                 else if (recordKind == BinaryLogRecordKind.ProjectImportArchive)
                 {
@@ -468,62 +467,66 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         private Stream SliceOfEmdeddedContent(bool canHaveCorruptedSize)
         {
-            // Work around bad logs caused by https://github.com/dotnet/msbuild/pull/9022#discussion_r1271468212
-            if (canHaveCorruptedSize)
-            {
-                int length;
+            return null;
 
-                // We have to preread some bytes to figure out if the log is buggy,
-                // so store bytes to backfill for the "real" read later.
-                byte[] prefixBytes;
+            
+            //// Work around bad logs caused by https://github.com/dotnet/msbuild/pull/9022#discussion_r1271468212
+            //if (canHaveCorruptedSize)
+            //{
+            //    int length;
 
-                // Version 16 is used by both 17.6 and 17.7, but some 17.7 builds have have a bug that writes length
-                // as a long instead of a 7-bit encoded int.  We can detect this by looking for the zip header, which
-                // is right after the length in either case.
+            //    // We have to preread some bytes to figure out if the log is buggy,
+            //    // so store bytes to backfill for the "real" read later.
+            //    byte[] prefixBytes;
 
-                byte[] nextBytes = _binaryReader.ReadBytes(12 /* 8 for the accidental long, 4 for the zip header */ );
+            //    // Version 16 is used by both 17.6 and 17.7, but some 17.7 builds have have a bug that writes length
+            //    // as a long instead of a 7-bit encoded int.  We can detect this by looking for the zip header, which
+            //    // is right after the length in either case.
 
-                // Does the zip header start 8 bytes in? That should never happen with a 7-bit int which should
-                // take at most 5 bytes.
-                if (nextBytes[8] == 0x50 && nextBytes[9] == 0x4b && nextBytes[10] == 0x3 && nextBytes[11] == 0x4)
-                {
-                    // The "buggy 17.7" case.  Read the length as a long.
+            //    byte[] nextBytes = _binaryReader.ReadBytes(12 /* 8 for the accidental long, 4 for the zip header */ );
 
-                    long length64 = BitConverter.ToInt64(nextBytes, 0);
+            //    // Does the zip header start 8 bytes in? That should never happen with a 7-bit int which should
+            //    // take at most 5 bytes.
+            //    if (nextBytes[8] == 0x50 && nextBytes[9] == 0x4b && nextBytes[10] == 0x3 && nextBytes[11] == 0x4)
+            //    {
+            //        // The "buggy 17.7" case.  Read the length as a long.
 
-                    if (length64 > int.MaxValue)
-                    {
-                        throw new NotSupportedException("Embedded archives larger than 2GB are not supported.");
-                    }
+            //        long length64 = BitConverter.ToInt64(nextBytes, 0);
 
-                    length = (int)length64;
+            //        if (length64 > int.MaxValue)
+            //        {
+            //            throw new NotSupportedException("Embedded archives larger than 2GB are not supported.");
+            //        }
 
-                    prefixBytes = new byte[4];
-                    Array.Copy(nextBytes, 8, prefixBytes, 0, 4);
-                }
-                else
-                {
-                    // The 17.6/correct 17.7 case.  Read the length as a 7-bit encoded int.
+            //        length = (int)length64;
 
-                    MemoryStream stream = new MemoryStream(nextBytes);
-                    BinaryReader reader = new BinaryReader(stream);
+            //        prefixBytes = new byte[4];
+            //        Array.Copy(nextBytes, 8, prefixBytes, 0, 4);
+            //    }
+            //    else
+            //    {
+            //        // The 17.6/correct 17.7 case.  Read the length as a 7-bit encoded int.
 
-                    length = reader.Read7BitEncodedInt();
+            //        MemoryStream stream = new MemoryStream(nextBytes);
+            //        BinaryReader reader = new BinaryReader(stream);
 
-                    int bytesRead = (int)reader.BaseStream.Position;
+            //        length = reader.Read7BitEncodedInt();
 
-                    prefixBytes = reader.ReadBytes(12 - bytesRead);
-                }
+            //        int bytesRead = (int)reader.BaseStream.Position;
 
-                Stream prefixStream = new MemoryStream(prefixBytes);
-                Stream dataStream = _binaryReader.BaseStream.Slice(length - prefixBytes.Length);
-                return prefixStream.Concat(dataStream);
-            }
-            else
-            {
-                int length = ReadInt32();
-                return _binaryReader.BaseStream.Slice(length);
-            }
+            //        prefixBytes = reader.ReadBytes(12 - bytesRead);
+            //    }
+
+            //    Stream prefixStream = new MemoryStream(prefixBytes);
+            //    Stream dataStream = _binaryReader.BaseStream.Slice(length - prefixBytes.Length);
+            //    return prefixStream.Concat(dataStream);
+            //}
+            //else
+            //{
+            //    int length = ReadInt32();
+            //    return _binaryReader.BaseStream.Slice(length);
+            //}
+            
         }
 
         private readonly List<(int name, int value)> nameValues = new List<(int name, int value)>(4096);
@@ -532,7 +535,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
         {
             if (_fileFormatVersion >= BinaryLogger.ForwardCompatibilityMinimalVersion)
             {
-                _readStream.BytesCountAllowedToRead = ReadInt32();
+                _binaryReader.BytesCountAllowedToRead = ReadInt32();
             }
 
             int count = ReadInt32();

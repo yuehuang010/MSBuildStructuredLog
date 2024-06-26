@@ -8,7 +8,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
 {
 
     /// <summary>
-    /// Combines BufferedStream and BinaryReader into a single optimized class.
+    /// Combines BufferedStream, BinaryReader, and TransparentReadStream into a single optimized class.
     /// </summary>
     /// <remarks>BinaryReader calls ReadByte() with a large overhead.
     /// This improvement is noticeable in Read7BitEncodedInt() as it can't peek ahead.</remarks>
@@ -29,7 +29,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             this.buffer = new byte[this.bufferCapacity];
         }
 
-        public Stream BaseStream => this.baseStream;
+        // public Stream BaseStream => this.baseStream;
 
         public int ReadInt32()
         {
@@ -42,6 +42,12 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         private StringBuilder builder;
         private char[] charBuffer;
+
+        public long Position => baseStream.Position + bufferOffset;
+
+        public int? BytesCountAllowedToRead { get; set; } = null;
+
+        public int BytesCountAllowedToReadRemaining => BytesCountAllowedToRead.HasValue ? 0 : (int)(BytesCountAllowedToRead.Value - Position);
 
         public string ReadString()
         {
@@ -61,28 +67,38 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
             if (charBuffer == null)
             {
-                charBuffer = new char[1040];
+                charBuffer = new char[this.bufferCapacity + 1];
             }
+
+            // Use the current buffer first.
+            readChunk = stringLength < (this.bufferLength - this.bufferOffset) ? stringLength : this.bufferLength - this.bufferOffset;
+            int charRead = this.encoding.GetChars(this.buffer, this.bufferOffset, readChunk, charBuffer, 0);
+            this.bufferOffset += readChunk;
+            if (stringLength == readChunk)
+            {
+                // if the string is fits in the buffer, then cast to string without using string builder.
+                return new string(charBuffer, 0, charRead);
+            }
+            else
+            {
+                builder ??= new StringBuilder();
+                builder.Append(charBuffer, 0, charRead);
+            }
+            currPos += readChunk;
 
             do
             {
-                readChunk = stringLength < (this.bufferLength - this.bufferOffset) ? stringLength : this.bufferLength - this.bufferOffset;
+                // Read up to bufferCapacity;
+                readChunk = Math.Min(stringLength - currPos, this.bufferCapacity);
                 FillBuffer(readChunk);
-
-                int charRead = this.encoding.GetChars(this.buffer, this.bufferOffset, readChunk, charBuffer, 0);
-
-                if (stringLength < this.bufferLength - this.bufferOffset)
-                {
-                    // If the string is already fits in the buffer.
-                    return new string(charBuffer,0, stringLength);
-                }
-
-                builder ??= new StringBuilder();
+                charRead = this.encoding.GetChars(this.buffer, this.bufferOffset, readChunk, charBuffer, 0);
+                this.bufferOffset += readChunk;
                 builder.Append(charBuffer, 0, charRead);
                 currPos += readChunk;
             } while (currPos < stringLength);
-
-            return builder.ToString();
+            string result = builder.ToString();
+            builder.Clear();
+            return result;
         }
 
         public long ReadInt64()
@@ -154,7 +170,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
         {
             if (current != SeekOrigin.Current || count < 0)
             {
-                throw new NotImplementedException();
+                throw new NotSupportedException("Only seeking from SeekOrigin.Current and forward.");
             }
 
             if (count == 0)
@@ -162,7 +178,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 return;
             }
 
-            // TODO: could be optimized as this doesn't need to fill the buffer.
+            // TODO: optimized to avoid writing to the buffer.
             FillBuffer(count);
             this.bufferOffset += count;
         }
@@ -188,7 +204,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
         }
 
         private void LoadBuffer(int numBytes)
-        { 
+        {
             numBytes = this.bufferCapacity;  // fill as much of the buffer as possible.
             int bytesRead = 0;
             int offset = this.bufferLength - this.bufferOffset;
