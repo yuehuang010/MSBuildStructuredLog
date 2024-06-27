@@ -10,7 +10,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
     /// <summary>
     /// Combines BufferedStream, BinaryReader, and TransparentReadStream into a single optimized class.
     /// </summary>
-    /// <remarks>BinaryReader calls ReadByte() with a large overhead.
+    /// <remarks>BinaryReader calls ReadByte() many times that results in a high overhead.
     /// This improvement is noticeable in Read7BitEncodedInt() as it can't peek ahead.</remarks>
     internal class BufferedBinaryReader : IDisposable
     {
@@ -28,8 +28,6 @@ namespace Microsoft.Build.Logging.StructuredLogger
             this.encoding = encoding ?? new UTF8Encoding();
             this.buffer = new byte[this.bufferCapacity];
         }
-
-        // public Stream BaseStream => this.baseStream;
 
         public int ReadInt32()
         {
@@ -52,7 +50,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
         public string ReadString()
         {
             int stringLength = Read7BitEncodedInt();
-            int currPos = 0;
+            int stringOffsetPos = 0;
             int readChunk = 0;
 
             if (stringLength == 0)
@@ -84,18 +82,19 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 builder ??= new StringBuilder();
                 builder.Append(charBuffer, 0, charRead);
             }
-            currPos += readChunk;
+            stringOffsetPos += readChunk;
 
             do
             {
                 // Read up to bufferCapacity;
-                readChunk = Math.Min(stringLength - currPos, this.bufferCapacity);
+                readChunk = Math.Min(stringLength - stringOffsetPos, this.bufferCapacity);
                 FillBuffer(readChunk);
                 charRead = this.encoding.GetChars(this.buffer, this.bufferOffset, readChunk, charBuffer, 0);
                 this.bufferOffset += readChunk;
                 builder.Append(charBuffer, 0, charRead);
-                currPos += readChunk;
-            } while (currPos < stringLength);
+                stringOffsetPos += readChunk;
+            } while (stringOffsetPos < stringLength);
+
             string result = builder.ToString();
             builder.Clear();
             return result;
