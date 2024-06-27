@@ -15,6 +15,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
     internal class BufferedBinaryReader : IDisposable
     {
         private Stream baseStream;
+        private int baseStreamPosition = 0;  // virtual Position of the base stream.
+        private long maxAllowedPosition = long.MaxValue;
         private int bufferCapacity;
         private byte[] buffer;
         private int bufferOffset = 0;
@@ -29,23 +31,31 @@ namespace Microsoft.Build.Logging.StructuredLogger
             this.buffer = new byte[this.bufferCapacity];
         }
 
+        public long Position => baseStreamPosition;
+
+        public int? BytesCountAllowedToRead
+        {
+            set => maxAllowedPosition = value.HasValue ? baseStreamPosition + value.Value : long.MaxValue;
+        }
+
+        public int BytesCountAllowedToReadRemaining => maxAllowedPosition == long.MaxValue ? 0 : (int)(maxAllowedPosition - baseStreamPosition);
+
         public int ReadInt32()
         {
             FillBuffer(4);
 
             var result = (int)(buffer[bufferOffset] | buffer[bufferOffset + 1] << 8 | buffer[bufferOffset + 2] << 16 | buffer[bufferOffset + 3] << 24);
-            bufferOffset += 4;
+            this.bufferOffset += 4;
+            this.baseStreamPosition += 4;
             return result;
         }
 
-        private StringBuilder builder;
+        // Reusable StringBuilder for ReadString().
+        private StringBuilder cachedBuilder;
+
+        // Reusable char[] for ReadString().
         private char[] charBuffer;
 
-        public long Position => baseStream.Position + bufferOffset;
-
-        public int? BytesCountAllowedToRead { get; set; } = null;
-
-        public int BytesCountAllowedToReadRemaining => BytesCountAllowedToRead.HasValue ? 0 : (int)(BytesCountAllowedToRead.Value - Position);
 
         public string ReadString()
         {
@@ -68,20 +78,28 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 charBuffer = new char[this.bufferCapacity + 1];
             }
 
-            // Use the current buffer first.
-            readChunk = stringLength < (this.bufferLength - this.bufferOffset) ? stringLength : this.bufferLength - this.bufferOffset;
-            int charRead = this.encoding.GetChars(this.buffer, this.bufferOffset, readChunk, charBuffer, 0);
-            this.bufferOffset += readChunk;
-            if (stringLength == readChunk)
+            int charRead = 0;
+
+            if (this.bufferLength > 0)
             {
-                // if the string is fits in the buffer, then cast to string without using string builder.
-                return new string(charBuffer, 0, charRead);
+                // Read content in the buffer.
+                readChunk = stringLength < (this.bufferLength - this.bufferOffset) ? stringLength : this.bufferLength - this.bufferOffset;
+                charRead = this.encoding.GetChars(this.buffer, this.bufferOffset, readChunk, charBuffer, 0);
+                this.bufferOffset += readChunk;
+                this.baseStreamPosition += readChunk;
+                if (stringLength == readChunk)
+                {
+                    // if the string is fits in the buffer, then cast to string without using string builder.
+                    return new string(charBuffer, 0, charRead);
+                }
+                else
+                {
+                    cachedBuilder ??= new StringBuilder();
+                    cachedBuilder.Append(charBuffer, 0, charRead);
+                }
             }
-            else
-            {
-                builder ??= new StringBuilder();
-                builder.Append(charBuffer, 0, charRead);
-            }
+
+            cachedBuilder ??= new StringBuilder();
             stringOffsetPos += readChunk;
 
             do
@@ -91,12 +109,13 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 FillBuffer(readChunk);
                 charRead = this.encoding.GetChars(this.buffer, this.bufferOffset, readChunk, charBuffer, 0);
                 this.bufferOffset += readChunk;
-                builder.Append(charBuffer, 0, charRead);
+                this.baseStreamPosition += readChunk;
+                cachedBuilder.Append(charBuffer, 0, charRead);
                 stringOffsetPos += readChunk;
             } while (stringOffsetPos < stringLength);
 
-            string result = builder.ToString();
-            builder.Clear();
+            string result = cachedBuilder.ToString();
+            cachedBuilder.Clear();
             return result;
         }
 
@@ -108,7 +127,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
             uint hi = (uint)(buffer[bufferOffset + 4] | buffer[bufferOffset + 5] << 8 |
                              buffer[bufferOffset + 6] << 16 | buffer[bufferOffset + 7] << 24);
             var result = (long)((ulong)hi) << 32 | lo;
-            bufferOffset += 8;
+            this.bufferOffset += 8;
+            this.baseStreamPosition += 8;
             return result;
         }
 
@@ -116,7 +136,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
         {
             FillBuffer(1);
             var result = (buffer[bufferOffset] != 0);
-            bufferOffset += 1;
+            bufferOffset++;
+            this.baseStreamPosition++;
             return result;
         }
 
@@ -128,9 +149,15 @@ namespace Microsoft.Build.Logging.StructuredLogger
             }
 
             FillBuffer(count);
+            if (this.bufferLength == 0)
+            {
+                return Array.Empty<byte>();
+            }
+
             var result = new byte[count];
             Array.Copy(this.buffer, bufferOffset, result, 0, count);
-            bufferOffset += count;
+            this.bufferOffset += count;
+            this.baseStreamPosition += count;
             return result;
         }
 
@@ -180,6 +207,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             // TODO: optimized to avoid writing to the buffer.
             FillBuffer(count);
             this.bufferOffset += count;
+            this.baseStreamPosition += count;
         }
 
         public Stream Slice(int numBytes)
@@ -201,6 +229,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             memoryStream.Position = 0;
 
             this.bufferOffset += numBytes;
+            this.baseStreamPosition += numBytes;
 
             return memoryStream;
         }
@@ -258,8 +287,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private byte InternalReadByte()
         {
+            this.baseStreamPosition++;
             return buffer[bufferOffset++];
         }
-
     }
 }

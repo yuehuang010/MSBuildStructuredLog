@@ -1836,7 +1836,15 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 return null;
             }
 
-            return ReadBuildEventContext();
+            int nodeId = _binaryReader.ReadInt32();
+            int projectContextId = _binaryReader.ReadInt32();
+            int targetId = _binaryReader.ReadInt32();
+            int taskId = _binaryReader.ReadInt32();
+            int submissionId = _binaryReader.ReadInt32();
+            int projectInstanceId = _binaryReader.ReadInt32();
+            int evaluationId = _binaryReader.ReadInt32();
+
+            return new BuildEventContext(submissionId, nodeId, evaluationId, projectInstanceId, projectContextId, targetId, taskId);
         }
 
         private EvaluationLocation ReadEvaluationLocation()
