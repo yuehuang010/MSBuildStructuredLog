@@ -183,6 +183,29 @@ namespace Microsoft.Build.Logging.StructuredLogger
             this.bufferOffset += count;
         }
 
+        public Stream Slice(int numBytes)
+        {
+            // create a memory stream of this number of bytes.
+            if (numBytes == 0)
+            {
+                return Stream.Null;
+            }
+
+            if (numBytes < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(numBytes));
+            }
+
+            this.FillBuffer(numBytes);
+            MemoryStream memoryStream = new MemoryStream(numBytes);
+            memoryStream.Write(this.buffer, this.bufferOffset, numBytes);
+            memoryStream.Position = 0;
+
+            this.bufferOffset += numBytes;
+
+            return memoryStream;
+        }
+
         public void Dispose()
         {
             ((IDisposable)baseStream).Dispose();

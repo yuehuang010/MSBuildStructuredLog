@@ -102,7 +102,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                         break;
                     }
 
-                    // queue.Add(instance);
+                    queue.Add(instance);
 
                     // only check the stopwatch every 1000 records, otherwise Stopwatch is showing up in profiles
                     if (progress != null && (recordsRead % 1000) == 0 && stopwatch.ElapsedMilliseconds > 200)
@@ -156,7 +156,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                         break;
                     }
 
-                    // queue.Add(instance);
+                    queue.Add(instance);
 
                     if (progress != null && stopwatch.ElapsedMilliseconds > 200)
                     {

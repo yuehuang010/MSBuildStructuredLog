@@ -231,9 +231,9 @@ namespace Microsoft.Build.UnitTests
             memoryStream.Position = 0;
             // event type
             binaryReader.Read7BitEncodedInt();
-            int eventSizePos = (int)memoryStream.Position;
+            int eventSizePos = (int)binaryReader.Position;
             int eventSize = binaryReader.Read7BitEncodedInt();
-            int positionAfterFirstEventSize = (int)memoryStream.Position;
+            int positionAfterFirstEventSize = (int)binaryReader.Position;
             memoryStream.Position = eventSizePos;
             // the extra 4 bytes
             Serialization.Write7BitEncodedInt(binaryWriter, eventSize + 4);

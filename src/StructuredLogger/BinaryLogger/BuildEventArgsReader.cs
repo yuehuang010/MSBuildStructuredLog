@@ -150,25 +150,14 @@ namespace Microsoft.Build.Logging.StructuredLogger
         /// </summary>
         public event Action<BinaryLogRecordKind, byte[]> OnBlobRead;
 
-        private SubStream? _lastSubStream;
-
         internal readonly record struct RawRecord(BinaryLogRecordKind RecordKind, Stream Stream);
 
         /// <summary>
         /// Reads the next serialized log record from the <see cref="BinaryReader"/>.
         /// </summary>
         /// <returns>ArraySegment containing serialized BuildEventArgs record</returns>
-        internal RawRecord ReadRaw()
-            => ReadRaw(decodeTextualRecords: true);
-
-        /// <summary>
-        /// Reads the next serialized log record from the <see cref="BinaryReader"/>.
-        /// </summary>
-        /// <returns>ArraySegment containing serialized BuildEventArgs record</returns>
-        internal RawRecord ReadRaw(bool decodeTextualRecords)
+        internal RawRecord ReadRaw(bool decodeTextualRecords = true)
         {
-            return new(BinaryLogRecordKind.Error, null);
-            /*
             // This method is internal and condition is checked once before calling in loop,
             //  so avoiding it here on each call.
             // But keeping it for documentation purposes - in case someone will try to call it and debug issues.
@@ -177,11 +166,6 @@ namespace Microsoft.Build.Logging.StructuredLogger
             ////    throw new InvalidOperationException(
             ////                           $"Raw data reading is not supported for file format version {_fileFormatVersion} (needs >=18).");
             ////}
-
-            if (_lastSubStream?.IsAtEnd == false)
-            {
-                _lastSubStream.ReadToEnd();
-            }
 
             BinaryLogRecordKind recordKind =
                 PreprocessRecordsTillNextEvent(decodeTextualRecords ? IsTextualDataRecord : (_ => false));
@@ -192,14 +176,10 @@ namespace Microsoft.Build.Logging.StructuredLogger
             }
 
             int serializedEventLength = ReadInt32();
-            Stream stream = _binaryReader.BaseStream.Slice(serializedEventLength);
-
-            _lastSubStream = stream as SubStream;
-
+            Stream stream = this._binaryReader.Slice(serializedEventLength);
             _recordNumber += 1;
 
             return new(recordKind, stream);
-            */
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -467,66 +447,62 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         private Stream SliceOfEmdeddedContent(bool canHaveCorruptedSize)
         {
-            return null;
+            // Work around bad logs caused by https://github.com/dotnet/msbuild/pull/9022#discussion_r1271468212
+            if (canHaveCorruptedSize)
+            {
+                int length;
 
-            
-            //// Work around bad logs caused by https://github.com/dotnet/msbuild/pull/9022#discussion_r1271468212
-            //if (canHaveCorruptedSize)
-            //{
-            //    int length;
+                // We have to preread some bytes to figure out if the log is buggy,
+                // so store bytes to backfill for the "real" read later.
+                byte[] prefixBytes;
 
-            //    // We have to preread some bytes to figure out if the log is buggy,
-            //    // so store bytes to backfill for the "real" read later.
-            //    byte[] prefixBytes;
+                // Version 16 is used by both 17.6 and 17.7, but some 17.7 builds have have a bug that writes length
+                // as a long instead of a 7-bit encoded int.  We can detect this by looking for the zip header, which
+                // is right after the length in either case.
 
-            //    // Version 16 is used by both 17.6 and 17.7, but some 17.7 builds have have a bug that writes length
-            //    // as a long instead of a 7-bit encoded int.  We can detect this by looking for the zip header, which
-            //    // is right after the length in either case.
+                byte[] nextBytes = _binaryReader.ReadBytes(12 /* 8 for the accidental long, 4 for the zip header */ );
 
-            //    byte[] nextBytes = _binaryReader.ReadBytes(12 /* 8 for the accidental long, 4 for the zip header */ );
+                // Does the zip header start 8 bytes in? That should never happen with a 7-bit int which should
+                // take at most 5 bytes.
+                if (nextBytes[8] == 0x50 && nextBytes[9] == 0x4b && nextBytes[10] == 0x3 && nextBytes[11] == 0x4)
+                {
+                    // The "buggy 17.7" case.  Read the length as a long.
 
-            //    // Does the zip header start 8 bytes in? That should never happen with a 7-bit int which should
-            //    // take at most 5 bytes.
-            //    if (nextBytes[8] == 0x50 && nextBytes[9] == 0x4b && nextBytes[10] == 0x3 && nextBytes[11] == 0x4)
-            //    {
-            //        // The "buggy 17.7" case.  Read the length as a long.
+                    long length64 = BitConverter.ToInt64(nextBytes, 0);
 
-            //        long length64 = BitConverter.ToInt64(nextBytes, 0);
+                    if (length64 > int.MaxValue)
+                    {
+                        throw new NotSupportedException("Embedded archives larger than 2GB are not supported.");
+                    }
 
-            //        if (length64 > int.MaxValue)
-            //        {
-            //            throw new NotSupportedException("Embedded archives larger than 2GB are not supported.");
-            //        }
+                    length = (int)length64;
 
-            //        length = (int)length64;
+                    prefixBytes = new byte[4];
+                    Array.Copy(nextBytes, 8, prefixBytes, 0, 4);
+                }
+                else
+                {
+                    // The 17.6/correct 17.7 case.  Read the length as a 7-bit encoded int.
 
-            //        prefixBytes = new byte[4];
-            //        Array.Copy(nextBytes, 8, prefixBytes, 0, 4);
-            //    }
-            //    else
-            //    {
-            //        // The 17.6/correct 17.7 case.  Read the length as a 7-bit encoded int.
+                    MemoryStream stream = new MemoryStream(nextBytes);
+                    BinaryReader reader = new BinaryReader(stream);
 
-            //        MemoryStream stream = new MemoryStream(nextBytes);
-            //        BinaryReader reader = new BinaryReader(stream);
+                    length = reader.Read7BitEncodedInt();
 
-            //        length = reader.Read7BitEncodedInt();
+                    int bytesRead = (int)reader.BaseStream.Position;
 
-            //        int bytesRead = (int)reader.BaseStream.Position;
+                    prefixBytes = reader.ReadBytes(12 - bytesRead);
+                }
 
-            //        prefixBytes = reader.ReadBytes(12 - bytesRead);
-            //    }
-
-            //    Stream prefixStream = new MemoryStream(prefixBytes);
-            //    Stream dataStream = _binaryReader.BaseStream.Slice(length - prefixBytes.Length);
-            //    return prefixStream.Concat(dataStream);
-            //}
-            //else
-            //{
-            //    int length = ReadInt32();
-            //    return _binaryReader.BaseStream.Slice(length);
-            //}
-            
+                Stream prefixStream = new MemoryStream(prefixBytes);
+                Stream dataStream = _binaryReader.Slice(length - prefixBytes.Length);
+                return prefixStream.Concat(dataStream);
+            }
+            else
+            {
+                int length = ReadInt32();
+                return _binaryReader.Slice(length);
+            }
         }
 
         private readonly List<(int name, int value)> nameValues = new List<(int name, int value)>(4096);
