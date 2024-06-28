@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+using DotUtils.StreamUtils;
 
 namespace Microsoft.Build.Logging.StructuredLogger
 {
@@ -223,9 +224,18 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 throw new ArgumentOutOfRangeException(nameof(numBytes));
             }
 
-            this.FillBuffer(numBytes);
             MemoryStream memoryStream = new MemoryStream(numBytes);
-            memoryStream.Write(this.buffer, this.bufferOffset, numBytes);
+
+            if (numBytes < this.bufferLength - this.bufferOffset)
+            {
+                memoryStream.Write(this.buffer, this.bufferOffset, numBytes);
+            }
+            else
+            {
+                memoryStream.Write(this.buffer, this.bufferOffset, this.bufferLength - this.bufferOffset);
+                memoryStream.Concat(this.baseStream.Slice(numBytes - (this.bufferLength - this.bufferOffset)));
+            }
+
             memoryStream.Position = 0;
 
             this.bufferOffset += numBytes;
@@ -287,6 +297,11 @@ namespace Microsoft.Build.Logging.StructuredLogger
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private byte InternalReadByte()
         {
+            if (this.maxAllowedPosition < this.baseStreamPosition + 1)
+            {
+                throw new EndOfStreamException();
+            }
+
             this.baseStreamPosition++;
             return buffer[bufferOffset++];
         }
