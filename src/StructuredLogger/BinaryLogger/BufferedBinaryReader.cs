@@ -224,24 +224,26 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 throw new ArgumentOutOfRangeException(nameof(numBytes));
             }
 
-            MemoryStream memoryStream = new MemoryStream(numBytes);
-
+            Stream resultStream;
             if (numBytes < this.bufferLength - this.bufferOffset)
             {
+                MemoryStream memoryStream = new MemoryStream(numBytes);
                 memoryStream.Write(this.buffer, this.bufferOffset, numBytes);
+                memoryStream.Position = 0;
+                resultStream = memoryStream;
             }
             else
             {
+                MemoryStream memoryStream = new MemoryStream(this.bufferLength - this.bufferOffset);
                 memoryStream.Write(this.buffer, this.bufferOffset, this.bufferLength - this.bufferOffset);
-                memoryStream.Concat(this.baseStream.Slice(numBytes - (this.bufferLength - this.bufferOffset)));
+                memoryStream.Position = 0;
+                resultStream = memoryStream.Concat(this.baseStream.Slice(numBytes - (this.bufferLength - this.bufferOffset)));
             }
-
-            memoryStream.Position = 0;
 
             this.bufferOffset += numBytes;
             this.baseStreamPosition += numBytes;
 
-            return memoryStream;
+            return resultStream;
         }
 
         public void Dispose()
@@ -261,12 +263,12 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 return;  // enough space in the current buffer;
             }
 
-            LoadBuffer(numBytes);
+            LoadBuffer();
         }
 
-        private void LoadBuffer(int numBytes)
+        private void LoadBuffer()
         {
-            numBytes = this.bufferCapacity;  // fill as much of the buffer as possible.
+            int numBytes = this.bufferCapacity;  // fill as much of the buffer as possible.
             int bytesRead = 0;
             int offset = this.bufferLength - this.bufferOffset;
 
