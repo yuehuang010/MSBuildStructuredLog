@@ -16,7 +16,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
     internal class BufferedBinaryReader : IDisposable
     {
         private Stream baseStream;
-        private int baseStreamPosition = 0;  // virtual Position of the base stream.
+        private long baseStreamPosition = 0;  // virtual Position of the base stream.
         private long maxAllowedPosition = long.MaxValue;
         private int bufferCapacity;
         private byte[] buffer;
@@ -36,7 +36,22 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         public int? BytesCountAllowedToRead
         {
-            set => maxAllowedPosition = value.HasValue ? baseStreamPosition + value.Value : long.MaxValue;
+            set
+            {
+                if (value.HasValue)
+                {
+                    if (value.Value < 0)
+                    {
+                        throw new Exception();
+                    }
+
+                    maxAllowedPosition = baseStreamPosition + value.Value;
+                }
+                else
+                {
+                    maxAllowedPosition = long.MaxValue;
+                }
+            }
         }
 
         public int BytesCountAllowedToReadRemaining => maxAllowedPosition == long.MaxValue ? 0 : (int)(maxAllowedPosition - baseStreamPosition);
