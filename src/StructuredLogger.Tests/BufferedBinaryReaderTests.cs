@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Build.Logging.StructuredLogger;
 using Xunit;
 
@@ -11,6 +8,9 @@ namespace StructuredLogger.Tests
 {
     public class BufferedBinaryReaderTest
     {
+        /// <summary>
+        /// Test ReadString
+        /// </summary>
         [Fact]
         public void Test_ReadString()
         {
@@ -64,6 +64,9 @@ namespace StructuredLogger.Tests
             }
         }
 
+        /// <summary>
+        /// Test ReadInt64.
+        /// </summary>
         [Fact]
         public void Test_ReadInt64()
         {
@@ -81,6 +84,9 @@ namespace StructuredLogger.Tests
             Assert.Equal(test, result);
         }
 
+        /// <summary>
+        /// Test Read 7BitEncoded Integer.
+        /// </summary>
         [Fact]
         public void Test_Read7BitEncodedInt()
         {
@@ -98,6 +104,9 @@ namespace StructuredLogger.Tests
             Assert.Equal(test, result);
         }
 
+        /// <summary>
+        /// Test Read7BitEncodedInt with varied length.
+        /// </summary>
         [Fact]
         public void Test_Read7BitEncodedInt_VariedLength()
         {
@@ -122,6 +131,73 @@ namespace StructuredLogger.Tests
             }
         }
 
+        /// <summary>
+        /// Test Reading multiple 7BitEncoded Integer.
+        /// </summary>
+        [Fact]
+        public void Test_BulkRead7Bit()
+        {
+            int initialCount = BufferedBinaryReader.MaxBulkRead7BitLength;
+            int test = initialCount;
+            var stream = new MemoryStream();
+
+            var writer = new BinaryWriter(stream);
+            while (test > 0)
+            {
+                writer.Write7BitEncodedInt(test);
+                test--;
+            }
+
+            stream.Position = 0;
+            test = initialCount;
+
+            var reader = new BufferedBinaryReader(stream);
+            int[] results = reader.BulkRead7BitEncodedInt(initialCount);
+
+            foreach (int result in results)
+            {
+                Assert.Equal(test, result);
+                test--;
+            }
+        }
+
+        /// <summary>
+        /// Test Reading multiple 7BitEncoded Integer.
+        /// </summary>
+        [Fact]
+        public void Test_Read7BitArray_Looped()
+        {
+            int initialCount = BufferedBinaryReader.MaxBulkRead7BitLength * 100;
+            int test = initialCount;
+            var stream = new MemoryStream();
+
+            var writer = new BinaryWriter(stream);
+            while (test > 0)
+            {
+                writer.Write7BitEncodedInt(test);
+                test--;
+            }
+
+            stream.Position = 0;
+            test = initialCount;
+
+            var reader = new BufferedBinaryReader(stream);
+
+            do
+            {
+                int[] results = reader.BulkRead7BitEncodedInt(BufferedBinaryReader.MaxBulkRead7BitLength);
+
+                foreach (int result in results)
+                {
+                    Assert.Equal(test, result);
+                    test--;
+                }
+            } while (test > 0);
+        }
+
+        /// <summary>
+        /// Test ReadInt64 that are larger than the internal buffer.
+        /// </summary>
         [Fact]
         public void Test_FillBuffer_Int64()
         {
@@ -149,6 +225,9 @@ namespace StructuredLogger.Tests
             }
         }
 
+        /// <summary>
+        /// Test Read7BitEncodedInt that are larger than the internal buffer.
+        /// </summary>
         [Fact]
         public void Test_FillBuffer_Read7Bit()
         {
@@ -176,6 +255,9 @@ namespace StructuredLogger.Tests
             }
         }
 
+        /// <summary>
+        /// Test ReadString support strings that are larger than the internal buffer.
+        /// </summary>
         [Fact]
         public void Test_FillBuffer_ReadString()
         {
@@ -194,6 +276,37 @@ namespace StructuredLogger.Tests
             foreach (string test in testString)
             {
                 string result = reader.ReadString();
+                Assert.Equal(test, result);
+            }
+        }
+
+        /// <summary>
+        /// Test Slice function to correctly stream with correct position.
+        /// </summary>
+        [Fact]
+        public void Test_SliceBuffer()
+        {
+            var testString = new string[] { "foobar", "catbar", "dogbar" };
+            var stream = new MemoryStream();
+
+            var writer = new BinaryWriter(stream);
+            foreach (string test in testString)
+            {
+                writer.Write(test);
+            }
+
+            stream.Position = 0;
+
+            var reader = new BufferedBinaryReader(stream, bufferCapacity: 10);
+            string firstResult = reader.ReadString();
+            Assert.Equal(testString[0], firstResult);
+
+            var sliceStream = reader.Slice(100);
+            var binaryReader = new BinaryReader(sliceStream);
+
+            foreach (string test in testString.Skip(1))
+            {
+                string result = binaryReader.ReadString();
                 Assert.Equal(test, result);
             }
         }

@@ -1325,10 +1325,11 @@ namespace Microsoft.Build.Logging.StructuredLogger
             fields.Code = ReadOptionalString();
             fields.File = ReadOptionalString();
             fields.ProjectFile = ReadOptionalString();
-            fields.LineNumber = ReadInt32();
-            fields.ColumnNumber = ReadInt32();
-            fields.EndLineNumber = ReadInt32();
-            fields.EndColumnNumber = ReadInt32();
+            var resultInt = _binaryReader.BulkRead7BitEncodedInt(4);
+            fields.LineNumber = resultInt[0];
+            fields.ColumnNumber = resultInt[1];
+            fields.EndLineNumber = resultInt[2];
+            fields.EndColumnNumber = resultInt[3];
         }
 
         private ExtendedDataFields? ReadExtendedDataFields()
@@ -1538,12 +1539,13 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         private BuildEventContext ReadBuildEventContext()
         {
-            int nodeId = ReadInt32();
-            int projectContextId = ReadInt32();
-            int targetId = ReadInt32();
-            int taskId = ReadInt32();
-            int submissionId = ReadInt32();
-            int projectInstanceId = ReadInt32();
+            var resultInts = _binaryReader.BulkRead7BitEncodedInt(6);
+            int nodeId = resultInts[0];
+            int projectContextId = resultInts[1];
+            int targetId = resultInts[2];
+            int taskId = resultInts[3];
+            int submissionId = resultInts[4];
+            int projectInstanceId = resultInts[5];
 
             // evaluationId was introduced in format version 2
             int evaluationId = BuildEventContext.InvalidEvaluationId;
