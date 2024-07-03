@@ -1539,7 +1539,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         private BuildEventContext ReadBuildEventContext()
         {
-            var resultInts = _binaryReader.BulkRead7BitEncodedInt(6);
+            int numberOfFields = _fileFormatVersion > 1 ? 7 : 6;
+            var resultInts = _binaryReader.BulkRead7BitEncodedInt(numberOfFields);
             int nodeId = resultInts[0];
             int projectContextId = resultInts[1];
             int targetId = resultInts[2];
@@ -1551,7 +1552,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             int evaluationId = BuildEventContext.InvalidEvaluationId;
             if (_fileFormatVersion > 1)
             {
-                evaluationId = ReadInt32();
+                evaluationId = resultInts[7];
             }
 
             var result = new BuildEventContext(
