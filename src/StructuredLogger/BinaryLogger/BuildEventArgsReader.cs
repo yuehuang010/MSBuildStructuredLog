@@ -1552,7 +1552,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             int evaluationId = BuildEventContext.InvalidEvaluationId;
             if (_fileFormatVersion > 1)
             {
-                evaluationId = resultInts[7];
+                evaluationId = resultInts[6];
             }
 
             var result = new BuildEventContext(
