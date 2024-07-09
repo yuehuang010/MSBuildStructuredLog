@@ -712,6 +712,8 @@ Examples:
  • $csc under($project Core)
  • Copying file project(ProjectA.csproj)
 
+Use '$target skipped=false' to exclude skipped targets (use true to only include skipped).
+
 Append [[$time]], [[$start]] and/or [[$end]] to show times and/or durations and sort the results by start time or duration descending (for tasks, targets and projects).
 
 Use start<""2023-11-23 14:30:54.579"", start>, end<, or end> to filter events that start or end before or after a given timestamp. Timestamp needs to be in quotes.
@@ -1430,8 +1432,17 @@ Recent (");
             return projectContext as IProjectOrEvaluation;
         }
 
+        private object currentBreadcrumb;
+
         public void UpdateBreadcrumb(object item)
         {
+            if (currentBreadcrumb == item)
+            {
+                return;
+            }
+
+            currentBreadcrumb = item;
+
             var node = item as BaseNode;
             IEnumerable<object> chain = node?.GetParentChainIncludingThis();
             if (chain == null || !chain.Any())
@@ -2377,6 +2388,26 @@ Recent (");
                             }
                         }
 
+                        // if a preprocessed text is selected and we can find the requested file in the preprocessed text,
+                        // navigate to that instead of opening in a separate file
+                        if (hasSourceFile is Import import)
+                        {
+                            string sourceFilePath = import.ImportedProjectFilePath;
+
+                            if (documentWell.tabControl.SelectedItem is TabItem current &&
+                                current.Content is TextViewerControl currentTextViewer &&
+                                currentTextViewer.EditorExtension is { } extension)
+                            {
+                                int offset = extension.PreprocessContext.FindFileOffset(sourceFilePath);
+                                if (offset > 0)
+                                {
+                                    currentTextViewer.TextEditor.CaretOffset = offset;
+                                    currentTextViewer.TextEditor.ScrollToLine(currentTextViewer.TextEditor.TextArea.Caret.Line);
+                                    return true;
+                                }
+                            }
+                        }
+
                         return DisplayFile(hasSourceFile.SourceFilePath, line, evaluation: evaluation);
                     case SourceFileLine sourceFileLine when sourceFileLine.Parent is SourceFile sourceFile && sourceFile.SourceFilePath != null:
                         return DisplayFile(sourceFile.SourceFilePath, sourceFileLine.LineNumber);
@@ -2443,7 +2474,36 @@ Recent (");
                 preprocess = preprocessedFileManager.GetPreprocessAction(preprocessableFilePath, PreprocessedFileManager.GetEvaluationKey(evaluation));
             }
 
-            documentWell.DisplaySource(preprocessableFilePath, text.Text, lineNumber, column, preprocess, navigationHelper);
+            EditorExtension editorExtension = null;
+            var context = preprocessedFileManager.TryGetContext(sourceFilePath);
+            if (context != null)
+            {
+                editorExtension = new EditorExtension();
+                editorExtension.PreprocessContext = context;
+
+                evaluation ??= context.Evaluation;
+
+                editorExtension.ImportSelected += import =>
+                {
+                    if (import != null)
+                    {
+                        UpdateBreadcrumb(import);
+                    }
+                    else if (evaluation != null)
+                    {
+                        UpdateBreadcrumb(evaluation);
+                    }
+                };
+            }
+
+            documentWell.DisplaySource(
+                preprocessableFilePath,
+                text.Text,
+                lineNumber,
+                column,
+                preprocess,
+                navigationHelper,
+                editorExtension);
             return true;
         }
 

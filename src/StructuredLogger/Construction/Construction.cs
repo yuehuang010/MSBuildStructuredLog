@@ -416,6 +416,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 var messageNode = new Message { Text = messageText };
                 target.AddChild(messageNode);
             }
+
+            target.Skipped = true;
         }
 
         public void TaskStarted(object sender, TaskStartedEventArgs args)
@@ -690,7 +692,20 @@ namespace Microsoft.Build.Logging.StructuredLogger
                         }
                     }
 
-                    parent = parent.GetOrCreateNodeWithName<Folder>(Strings.Warnings);
+                    if (args.HelpKeyword == "MSBuild.DuplicateImport")
+                    {
+                        var import = parent.FindFirstDescendant<Import>(i =>
+                            string.Equals(args.File, i.ImportedProjectFilePath, StringComparison.OrdinalIgnoreCase));
+                        if (import != null)
+                        {
+                            parent = import;
+                        }
+                    }
+
+                    if (parent is ProjectEvaluation)
+                    {
+                        parent = parent.GetOrCreateNodeWithName<Folder>(Strings.Warnings);
+                    }
 
                     Populate(warning, args, text);
 
