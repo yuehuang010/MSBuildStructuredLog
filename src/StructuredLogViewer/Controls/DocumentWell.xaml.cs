@@ -123,7 +123,7 @@ namespace StructuredLogViewer.Controls
             }
 
             var textViewerControl = new TextViewerControl();
-            textViewerControl.DisplaySource(sourceFilePath, text, lineNumber, column, preprocess, navigationHelper);
+            textViewerControl.DisplaySource(sourceFilePath, text, lineNumber, column, preprocess, navigationHelper: navigationHelper);
 
             if (editorExtension != null)
             {

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -25,10 +26,12 @@ namespace StructuredLogViewer.Controls
     {
         private static readonly Regex solutionFileRegex = new Regex(@"^\s*Microsoft Visual Studio Solution File", RegexOptions.Compiled | RegexOptions.Singleline);
         private FoldingManager foldingManager;
+        private ToolTip toolTip;
 
         public string FilePath { get; private set; }
         public string Text { get; private set; }
         public Action Preprocess { get; private set; }
+        public Func<string, string> ToolTipProvider { get; private set; }
         public bool IsXml { get; private set; }
 
         public TextEditor TextEditor => textEditor;
@@ -53,6 +56,8 @@ namespace StructuredLogViewer.Controls
             textView.Options.EnableEmailHyperlinks = false;
             textView.Options.EnableHyperlinks = false;
             textEditor.IsReadOnly = true;
+            this.toolTip = new ToolTip() { Placement = PlacementMode.Relative, PlacementTarget = this.TextEditor };
+            this.TextEditor.ToolTip = this.toolTip;
 
             if (SettingsService.UseDarkTheme)
             {
@@ -104,10 +109,14 @@ namespace StructuredLogViewer.Controls
             int lineNumber = 0,
             int column = 0,
             Action showPreprocessed = null,
-            NavigationHelper navigationHelper = null)
+            NavigationHelper navigationHelper = null,
+            Func<string, string> tooltipProvider = null)
         {
             this.FilePath = sourceFilePath;
             this.Preprocess = showPreprocessed;
+            this.ToolTipProvider = tooltipProvider;
+
+            this.TextEditor.GetPositionFromPoint(new Point(lineNumber, column));
 
             preprocess.Visibility = showPreprocessed != null ? Visibility.Visible : Visibility.Collapsed;
 
@@ -404,6 +413,84 @@ async
             {
                 textEditor.Select(projFolding.StartOffset, projFolding.Title.Length);
                 textEditor.ScrollTo(textEditor.Document.GetLineByOffset(projFolding.StartOffset).LineNumber, 0);
+            }
+        }
+
+        private void TryUpdateToolTipText(Point mousePosition)
+        {
+            //if (this.ToolTipProvider == null)
+            //{
+            //    return;
+            //}
+
+            var textPos = this.TextEditor.GetPositionFromPoint(mousePosition);
+            if (!textPos.HasValue)
+            {
+                CloseToolTip();
+                return;
+            }
+
+            string word = this.GetWordFromPosition(textPos.Value, out string type);
+
+            if (string.IsNullOrEmpty(word))
+            {
+                CloseToolTip();
+                return;
+            }
+
+            this.toolTip.HorizontalOffset = mousePosition.X;
+            this.toolTip.VerticalOffset = mousePosition.Y;
+            this.toolTip.Content = word;
+            this.toolTip.IsOpen = true;
+
+            void CloseToolTip()
+            {
+                this.toolTip.Content = string.Empty;
+                this.toolTip.IsOpen = false;
+            }
+        }
+
+        private string GetWordFromPosition(TextViewPosition textPos, out string type)
+        {
+            type = "property";
+            // return $"Line:{textPos.Line} Column:{textPos.Column}.";
+
+            var document = this.TextEditor.Document;
+            var offset = document.GetOffset(textPos.Line, textPos.Column);
+            int start = ICSharpCode.AvalonEdit.Document.TextUtilities.GetNextCaretPosition(document, offset, System.Windows.Documents.LogicalDirection.Backward, ICSharpCode.AvalonEdit.Document.CaretPositioningMode.WordBorder);
+            int end = ICSharpCode.AvalonEdit.Document.TextUtilities.GetNextCaretPosition(document, offset, System.Windows.Documents.LogicalDirection.Forward, ICSharpCode.AvalonEdit.Document.CaretPositioningMode.WordBorder);
+
+            if (start == -1 || end == -1 || end <= start)
+            {
+                return string.Empty;
+            }
+
+            var typeCandiate = foldingManager.GetFoldingsContaining(start)?.LastOrDefault(f =>allowKeywords.Contains(f.Title));
+
+            if (typeCandiate == null)
+            {
+                return string.Empty;
+            }
+
+            var word = document.GetText(start, end - start);
+            return $"{typeCandiate.Title} + {word}";
+        }
+
+        private string[] allowKeywords = [
+            "<Project>",
+            "<PropertyGroup>",
+            "<ItemGroup>",
+            ];
+
+        private void textEditor_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (sender != this && this.IsXml)
+            {
+                if (e.LeftButton == MouseButtonState.Released && e.RightButton == MouseButtonState.Released)
+                {
+                    var mousePos = e.GetPosition(this.TextEditor);
+                    TryUpdateToolTipText(mousePos);
+                }
             }
         }
     }
