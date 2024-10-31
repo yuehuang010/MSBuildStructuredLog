@@ -82,7 +82,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             }
         }
 
-        private void AnalyzeCopyOperation(FileCopyOperation copyOperation, Task task)
+        private void AnalyzeCopyOperation(FileCopyOperation copyOperation, Task task = null, Target target = null)
         {
             var source = copyOperation.Source;
             var destination = copyOperation.Destination;
@@ -92,7 +92,9 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 return;
             }
 
-            var project = task.GetNearestParent<Project>();
+            target ??= task.GetNearestParent<Target>();
+
+            var project = target.GetNearestParent<Project>();
 
             if (!Path.IsPathRooted(source))
             {
@@ -116,7 +118,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             {
                 FileCopyOperation = copyOperation,
                 Task = task,
-                Target = task.GetNearestParent<Target>(),
+                Target = target,
                 Project = project
             };
 
@@ -256,7 +258,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 var task = target.FindChild<MSBuildTask>();
                 if (task != null)
                 {
-                    var outputItems = task.FindLastChild<Folder>(f => f.Name == "OutputItems");
+                    var outputItems = task.FindLastChild<Folder>(static f => f.Name == "OutputItems");
                     if (outputItems != null)
                     {
                         var addItem = outputItems.FindChild<AddItem>();
@@ -265,13 +267,13 @@ namespace Microsoft.Build.Logging.StructuredLogger
                             var item = addItem.FindChild<Item>(filePath);
                             if (item != null)
                             {
-                                var metadata = item.FindChild<Metadata>(m => m.Name == "MSBuildSourceProjectFile");
+                                var metadata = item.FindChild<Metadata>(static m => m.Name == "MSBuildSourceProjectFile");
                                 if (metadata != null)
                                 {
                                     var metadataValue = metadata.Value;
                                     resultSet.Add(new SearchResult(metadata));
 
-                                    var referencedProject = task.FindChild<Project>(p => p.Name.Equals(Path.GetFileName(metadataValue), StringComparison.OrdinalIgnoreCase));
+                                    var referencedProject = task.FindChild<Project, string>(static (p, metadataValue) => p.Name.Equals(Path.GetFileName(metadataValue), StringComparison.OrdinalIgnoreCase), metadataValue);
                                     if (referencedProject != null)
                                     {
                                         var getCopyToOutputDirectoryItems = referencedProject.FindTarget("GetCopyToOutputDirectoryItems");
@@ -299,16 +301,16 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 var task = target.FindChild<ResolveAssemblyReferenceTask>();
                 if (task != null)
                 {
-                    var outputItems = task.FindLastChild<Folder>(f => f.Name == "OutputItems");
+                    var outputItems = task.FindLastChild<Folder>(static f => f.Name == "OutputItems");
                     if (outputItems != null)
                     {
-                        var addItem = outputItems.FindChild<AddItem>(a => a.Name == "ReferenceCopyLocalPaths");
+                        var addItem = outputItems.FindChild<AddItem>(static a => a.Name == "ReferenceCopyLocalPaths");
                         if (addItem != null)
                         {
                             var item = addItem.FindChild<Item>(filePath);
                             if (item != null)
                             {
-                                var metadata = item.FindChild<Metadata>(m => m.Name == "MSBuildSourceProjectFile");
+                                var metadata = item.FindChild<Metadata>(static m => m.Name == "MSBuildSourceProjectFile");
                                 if (metadata != null)
                                 {
                                     var metadataValue = metadata.Value;
@@ -504,10 +506,10 @@ namespace Microsoft.Build.Logging.StructuredLogger
                     continue;
                 }
 
-                var message = incoming.FileCopyOperation.Message;
-                var result = new SearchResult(message);
+                var node = incoming.FileCopyOperation.Node;
+                var result = new SearchResult(node);
                 result.AssociatedFileCopy = incoming;
-                result.AddMatch(message.Text, matchText);
+                result.AddMatch(node.Title, matchText);
                 result.RootFolder = "Incoming";
                 resultSet.Add(result);
                 if (resultSet.Count >= maxResults)
@@ -523,10 +525,10 @@ namespace Microsoft.Build.Logging.StructuredLogger
                     continue;
                 }
 
-                var message = outgoing.FileCopyOperation.Message;
-                var result = new SearchResult(message);
+                var node = outgoing.FileCopyOperation.Node;
+                var result = new SearchResult(node);
                 result.AssociatedFileCopy = outgoing;
-                result.AddMatch(message.Text, matchText);
+                result.AddMatch(node.Title, matchText);
                 result.RootFolder = "Outgoing";
                 resultSet.Add(result);
                 if (resultSet.Count >= maxResults)
@@ -575,6 +577,99 @@ namespace Microsoft.Build.Logging.StructuredLogger
             }
 
             return null;
+        }
+
+        public void AnalyzeTarget(Target target)
+        {
+            if (target.Name == "_CopyOutOfDateSourceItemsToOutputDirectory" && target.Skipped)
+            {
+                if (target.FindChild<Folder>(Strings.Inputs) is Folder inputFolder &&
+                    target.FindChild<Folder>(Strings.Outputs) is Folder outputFolder)
+                {
+                    var inputs = inputFolder
+                        .Children
+                        .OfType<Item>()
+                        .Select(i => i.Text)
+                        .Where(s => s != null)
+                        .OrderBy(s => Path.GetFileName(s), StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    var outputs = outputFolder
+                        .Children
+                        .OfType<Item>()
+                        .Select(i => i.Text)
+                        .Where(s => s != null)
+                        .OrderBy(s => Path.GetFileName(s), StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+
+                    int imbalance = outputs.Length - inputs.Length;
+
+                    // There's no accurate way to build a correlation between sources and destinations,
+                    // so the crude algorithm below is just a heuristic that works in the common case.
+                    // There can be more outputs than inputs and it's not clear which input goes into
+                    // which output. We try to recover from some simple cases, such as 12 inputs going
+                    // into 13 outputs, one input going into two places. But we can't recover from
+                    // more difficult situations, but that's OK, we'll just under report some
+                    // ephemeral copies (that didn't happen anyway because we're in an incremental
+                    // build and the target got skipped anyway).
+                    for (int i = 0, j = 0; i < inputs.Length && j < outputs.Length; i++, j++)
+                    {
+                        var input = inputs[i];
+                        var output = outputs[j];
+                        var inputName = Path.GetFileName(input);
+                        var outputName = Path.GetFileName(output);
+                        if (string.Equals(inputName, outputName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            ReportCopy(target, input, output);
+                        }
+                        else
+                        {
+                            // we dyssynchronized, we can no longer accurately correlate inputs to outputs, so just keep going in the hope that we'll resync later
+                            continue;
+                        }
+
+                        if (imbalance < 0 && i < inputs.Length - 1 && string.Equals(inputName, Path.GetFileName(inputs[i + 1]), StringComparison.OrdinalIgnoreCase))
+                        {
+                            j--;
+                            imbalance++;
+                            continue;
+                        }
+
+                        if (imbalance > 0 && j < outputs.Length - 1 && string.Equals(outputName, Path.GetFileName(outputs[j + 1]), StringComparison.OrdinalIgnoreCase))
+                        {
+                            i--;
+                            imbalance--;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        private void ReportCopy(Target target, string input, string output)
+        {
+            TreeNode node = target;
+
+            var inputs = target.FindChild<Folder>(Strings.Inputs);
+            if (inputs != null)
+            {
+                var item = inputs.FindChild<Item>(i => i.Text == input);
+                if (item != null)
+                {
+                    node = item;
+                }
+            }
+
+            if (input != null && output != null)
+            {
+                var operation = new FileCopyOperation
+                {
+                    Source = input,
+                    Destination = output,
+                    Copied = false,
+                    Node = node
+                };
+                AnalyzeCopyOperation(operation, target: target);
+            }
         }
     }
 }

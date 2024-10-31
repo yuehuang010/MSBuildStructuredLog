@@ -722,6 +722,8 @@ Use '$copy path' where path is a file or directory to find file copy operations 
 
 Use '$nuget project(MyProject.csproj) Package.Name' to search for NuGet packages (by name or version), dependencies (direct and transitive) and files coming from NuGet packages.
 
+Use '$projectreference project(MyProject.csproj) RefProj' to search for projects referenced by MyProject.csproj directly or indirectly. For a single matching project all referencing projects will be shown as well.
+
 Examples:
 ";
 
@@ -854,12 +856,20 @@ Recent (");
                 var targetFramework = GetTaskTargetFramework(task);
                 if (targetFramework == null || targetFramework.StartsWith(".NETFramework"))
                 {
-                    var taskRunnerExe = Path.Combine(directory, "TaskRunner.exe");
+                    var taskRunnerExe = Path.Combine(directory, "TaskRunner.x86", "TaskRunner.exe");
+                    // for easier debugging
+                    Environment.SetEnvironmentVariable("COMPLUS_ZapDisable", "1");
                     Process.Start(taskRunnerExe.QuoteIfNeeded(), arguments);
                 }
                 else
                 {
-                    var taskRunnerDll = Path.Combine(directory, "TaskRunner.dll");
+                    var taskRunnerDll = Path.Combine(directory, "TaskRunner.x86", "TaskRunner.dll");
+                    Environment.SetEnvironmentVariable("DOTNET_ReadyToRun", "0");
+                    Environment.SetEnvironmentVariable("DOTNET_TieredCompilation", "0");
+                    Environment.SetEnvironmentVariable("DOTNET_TieredPGO", "0");
+                    Environment.SetEnvironmentVariable("COMPlus_ReadyToRun", "0");
+                    Environment.SetEnvironmentVariable("COMPlus_TieredCompilation", "0");
+
                     Process.Start("dotnet", $"{taskRunnerDll.QuoteIfNeeded()} {arguments}");
                 }
             }
@@ -1790,11 +1800,9 @@ Recent (");
 
         public void Copy()
         {
-            var tree = ActiveTreeView;
-            var treeNode = tree?.SelectedItem;
-            if (treeNode != null)
+            if (ActiveTreeView?.SelectedItem is BaseNode node)
             {
-                var text = treeNode.ToString();
+                var text = node.GetFullText();
                 CopyToClipboard(text);
             }
         }
@@ -2072,8 +2080,7 @@ Recent (");
         {
             if (treeView.SelectedItem is TreeNode node && node.HasChildren)
             {
-                // the texts have \n for line breaks, expand to \r\n
-                var children = node.Children.Select(c => c.ToString().Replace("\n", "\r\n"));
+                var children = node.Children.Select(c => c.GetFullText());
                 var text = string.Join(Environment.NewLine, children);
                 CopyToClipboard(text);
             }
@@ -2368,6 +2375,13 @@ Recent (");
                         searchLogControl.ResultsList.ItemsSource is IEnumerable<BaseNode> results &&
                         results.Contains(item):
                         return SearchForFullPath(item.Text);
+                    case Project project when
+                        searchLogControl.SearchText.Contains("$projectreference"):
+                        return SearchForProject(Path.GetFileName(project.ProjectFile));
+                    case ProxyNode proxy when
+                        searchLogControl.SearchText.Contains("$projectreference") &&
+                        proxy.Original is Project originalProject:
+                        return SearchForProject(Path.GetFileName(originalProject.ProjectFile));
                     case IHasSourceFile hasSourceFile when hasSourceFile.SourceFilePath != null:
                         int line = 0;
                         var hasLine = hasSourceFile as IHasLineNumber;
@@ -2443,6 +2457,13 @@ Recent (");
             }
 
             return false;
+        }
+
+        private bool SearchForProject(string name)
+        {
+            var text = $"$projectreference project({name})";
+            searchLogControl.SearchText = text;
+            return true;
         }
 
         private bool DisplayEmbeddedFile(Item item)
@@ -2649,7 +2670,7 @@ Recent (");
                 return;
             }
 
-            var statsRoot = Build.FindChild<Folder>(f => f.Name.StartsWith(Strings.Statistics));
+            var statsRoot = Build.FindChild<Folder>(static f => f.Name.StartsWith(Strings.Statistics));
             if (statsRoot != null)
             {
                 return;
@@ -2762,9 +2783,9 @@ Recent (");
 
         private void DisplayTreeStats(Folder statsRoot, BuildStatistics treeStats, BinlogStats recordStats)
         {
-            var buildMessageNode = statsRoot.FindChild<Folder>(n => n.Name.StartsWith("BuildMessage", StringComparison.Ordinal));
-            var taskInputsNode = buildMessageNode.FindChild<Folder>(n => n.Name.StartsWith("Task Input", StringComparison.Ordinal));
-            var taskOutputsNode = buildMessageNode.FindChild<Folder>(n => n.Name.StartsWith("Task Output", StringComparison.Ordinal));
+            var buildMessageNode = statsRoot.FindChild<Folder>(static n => n.Name.StartsWith("BuildMessage", StringComparison.Ordinal));
+            var taskInputsNode = buildMessageNode.FindChild<Folder>(static n => n.Name.StartsWith("Task Input", StringComparison.Ordinal));
+            var taskOutputsNode = buildMessageNode.FindChild<Folder>(static n => n.Name.StartsWith("Task Output", StringComparison.Ordinal));
 
             AddTopTasks(treeStats.TaskParameterMessagesByTask, taskInputsNode);
             AddTopTasks(treeStats.OutputItemMessagesByTask, taskOutputsNode);

@@ -13,6 +13,7 @@
     <Product>MSBuild Structured Log Viewer</Product>
     <AssemblyTitle>MSBuild Structured Log Viewer</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup Condition="$(TargetFramework) == 'net472'">
@@ -52,7 +53,10 @@
   </ItemGroup>
 
   <Target Name="EnsureTaskRunnerIsBuilt">
-    <MSBuild Projects="..\TaskRunner\TaskRunner.csproj" Targets="Build" />
+    <MSBuild
+        Projects="..\TaskRunner\TaskRunner.csproj"
+        Targets="Build"
+        RemoveProperties="TargetFramework"/>
   </Target>
 
   <Target
