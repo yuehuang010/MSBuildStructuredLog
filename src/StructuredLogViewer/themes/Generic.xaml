@@ -235,6 +235,10 @@
         <Setter TargetName="nameText" Property="Foreground" Value="Red" />
         <Setter TargetName="icon" Property="Fill" Value="{DynamicResource ErrorBrush}" />
       </DataTrigger>
+      <DataTrigger Binding="{Binding Name}" Value="Circular Project References">
+        <Setter TargetName="nameText" Property="Foreground" Value="Red" />
+        <Setter TargetName="icon" Property="Fill" Value="{DynamicResource ErrorBrush}" />
+      </DataTrigger>
       <DataTrigger Binding="{Binding Name}" Value="DoubleBuild">
         <Setter TargetName="nameText" Property="Foreground" Value="Red" />
         <Setter TargetName="icon" Property="Fill" Value="{DynamicResource ErrorBrush}" />
@@ -625,6 +629,20 @@
                             ItemsSource="{Binding Children}">
     <StackPanel Orientation="Horizontal">
       <Rectangle x:Name="icon" Style="{StaticResource NodeIcon}" Stroke="{DynamicResource MessageStroke}" Fill="{DynamicResource MessageBrush}" />
+      <TextBlock x:Name="messageText" Text="{Binding ShortenedText}" />
+    </StackPanel>
+    <DataTemplate.Triggers>
+      <DataTrigger Binding="{Binding IsLowRelevance}" Value="True">
+        <Setter TargetName="messageText" Property="Opacity" Value="0.25" />
+      </DataTrigger>
+    </DataTemplate.Triggers>
+  </HierarchicalDataTemplate>
+
+  <HierarchicalDataTemplate DataType="{x:Type l:TimedMessage}"
+                            ItemsSource="{Binding Children}">
+    <StackPanel Orientation="Horizontal">
+      <Rectangle x:Name="icon" Style="{StaticResource NodeIcon}" Stroke="{DynamicResource MessageStroke}" Fill="{DynamicResource MessageBrush}" />
+      <TextBlock x:Name="timeStamp" Text="{Binding TimestampText}" Opacity="0.3" Margin="0,0,8,0" />
       <TextBlock x:Name="messageText" Text="{Binding ShortenedText}" />
     </StackPanel>
     <DataTemplate.Triggers>
