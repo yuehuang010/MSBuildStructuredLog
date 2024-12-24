@@ -71,8 +71,7 @@
                   Grid.Row="1"
                   ShowLineNumbers="True"
                   LineNumbersForeground="Teal"
-                  FontSize="14"
-                  MouseMove="textEditor_MouseMove">
+                  FontSize="14">
       <a:TextEditor.ContextMenu>
         <ContextMenu>
           <MenuItem Header="Copy" Click="copyMenu_Click" />
