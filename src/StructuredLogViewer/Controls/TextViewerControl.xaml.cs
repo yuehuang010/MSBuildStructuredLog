@@ -430,9 +430,8 @@ async
                 return;
             }
 
-            string word = this.GetWordFromPosition(textPos.Value, out string type);
-
-            if (string.IsNullOrEmpty(word))
+            if (!this.GetWordFromPosition(textPos.Value, out string type, out string word)
+                && string.IsNullOrEmpty(type) && string.IsNullOrEmpty(word))
             {
                 CloseToolTip();
                 return;
@@ -440,7 +439,7 @@ async
 
             this.toolTip.HorizontalOffset = mousePosition.X;
             this.toolTip.VerticalOffset = mousePosition.Y;
-            this.toolTip.Content = word;
+            this.toolTip.Content = $"{type} {word}";
             this.toolTip.IsOpen = true;
 
             void CloseToolTip()
@@ -450,31 +449,41 @@ async
             }
         }
 
-        private string GetWordFromPosition(TextViewPosition textPos, out string type)
+        private bool GetWordFromPosition(TextViewPosition textPos, out string type, out string word)
         {
-            type = "property";
+            type = string.Empty;
+            word = string.Empty;
             // return $"Line:{textPos.Line} Column:{textPos.Column}.";
 
             var document = this.TextEditor.Document;
             var offset = document.GetOffset(textPos.Line, textPos.Column);
-            int start = ICSharpCode.AvalonEdit.Document.TextUtilities.GetNextCaretPosition(document, offset, System.Windows.Documents.LogicalDirection.Backward, ICSharpCode.AvalonEdit.Document.CaretPositioningMode.WordBorder);
+            int start = ICSharpCode.AvalonEdit.Document.TextUtilities.GetNextCaretPosition(document, offset + 1, System.Windows.Documents.LogicalDirection.Backward, ICSharpCode.AvalonEdit.Document.CaretPositioningMode.WordBorder);
             int end = ICSharpCode.AvalonEdit.Document.TextUtilities.GetNextCaretPosition(document, offset, System.Windows.Documents.LogicalDirection.Forward, ICSharpCode.AvalonEdit.Document.CaretPositioningMode.WordBorder);
 
             if (start == -1 || end == -1 || end <= start)
             {
-                return string.Empty;
+                return false;
             }
 
             var typeCandiate = foldingManager.GetFoldingsContaining(start)?.LastOrDefault(f =>allowKeywords.Contains(f.Title));
 
-            if (typeCandiate == null)
+            if (string.IsNullOrEmpty(typeCandiate.Title))
             {
-                return string.Empty;
+                return false;
             }
 
-            var word = document.GetText(start, end - start);
-            return $"{typeCandiate.Title} + {word}";
+            word = document.GetText(start, end - start).Trim(specialCharacters).Trim();
+            type = typeCandiate.Title;
+
+            if (string.IsNullOrEmpty(word))
+            {
+                return false;
+            }
+
+            return true;
         }
+
+        private char[] specialCharacters = ['@', '$', '(', ')', '<', '>', '\r', '\n', ' '];
 
         private string[] allowKeywords = [
             "<Project>",
