@@ -144,6 +144,10 @@ namespace Microsoft.Build.Logging.StructuredLogger
             string propertyReassignment = GetPropertyReassignmentText();
             PropertyReassignmentRegex = new Regex(propertyReassignment, RegexOptions.Compiled | RegexOptions.Singleline);
 
+            PropertyAssignment = GetString("PropertyAssignment");
+
+            UninitializedPropertyRead = GetString("UninitializedPropertyRead");
+
             // MSBuild 17.6 shipped with this hardcoded to English (the first part of the regex), but it was switched to a different
             // localized message in https://github.com/dotnet/msbuild/pull/8665. Support both here.
             string deferredResponseFile = ("^(?:Included response file: {0}|" + GetString("PickedUpSwitchesFromAutoResponse") + ")$")
@@ -212,6 +216,9 @@ namespace Microsoft.Build.Logging.StructuredLogger
             RemovingPropertiesPrefix = GetString("General.UndefineProperties");
             EvaluationStarted = GetString("EvaluationStarted");
             EvaluationFinished = GetString("EvaluationFinished");
+
+            TotalAnalyzerExecutionTimeRegex = CreateRegex(GetString("AnalyzerTotalExecutionTime"), 1);
+            TotalGeneratorExecutionTimeRegex = CreateRegex(GetString("GeneratorTotalExecutionTime"), 1);
         }
 
         private static string GetEmptyConditionText()
@@ -436,6 +443,9 @@ namespace Microsoft.Build.Logging.StructuredLogger
         public static Regex TaskFoundRegex { get; set; }
         public static Regex CouldNotResolveSdkRegex { get; set; }
 
+        public static Regex TotalAnalyzerExecutionTimeRegex { get; set; }
+        public static Regex TotalGeneratorExecutionTimeRegex { get; set; }
+
         public static string TargetSkippedFalseCondition { get; set; }
         public static string TargetAlreadyCompleteSuccess { get; set; }
         public static string TargetAlreadyCompleteFailure { get; set; }
@@ -443,7 +453,9 @@ namespace Microsoft.Build.Logging.StructuredLogger
         public static string ProjectImportSkippedFalseCondition { get; set; }
         public static string CouldNotResolveSdk { get; set; }
         public static string ProjectImportSkippedExpressionEvaluatedToEmpty { get; set; }
+        public static string PropertyAssignment { get; set; }
         public static string PropertyReassignment { get; set; }
+        public static string UninitializedPropertyRead { get; set; }
         public static string ProjectImportSkippedNoMatches { get; set; }
         public static string ProjectImportSkippedMissingFile { get; set; }
         public static string ProjectImportSkippedInvalidFile { get; set; }
@@ -598,9 +610,6 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
         public static string To => "\" to \"";
         public static string ToFile => "\" to file \"";
-
-        public static string TotalAnalyzerExecutionTime => "Total analyzer execution time:";
-        public static string TotalGeneratorExecutionTime => "Total generator execution time:";
 
         /// <summary>
         /// https://github.com/NuGet/Home/issues/10383
