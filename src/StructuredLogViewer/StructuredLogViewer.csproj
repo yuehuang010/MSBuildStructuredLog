@@ -25,6 +25,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- needed for SystemDropShadowChrome used in ComboBox.xaml -->
+    <Reference Include="PresentationFramework.Aero2" Condition="$(TargetFramework) == 'net472'" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AdonisUI" />
     <PackageReference Include="AdonisUI.ClassicTheme" />
     <PackageReference Include="AvalonEdit" />
@@ -33,7 +38,6 @@
     <PackageReference Include="Mono.Cecil" />
     <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" />
     <PackageReference Include="squirrel.windows" GeneratePathProperty="true" />
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" PrivateAssets="all" />
     <PackageReference Include="AutomaticGraphLayout.WpfGraphControl" />
   </ItemGroup>
 

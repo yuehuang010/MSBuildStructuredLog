@@ -24,7 +24,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             {
                 if (string.IsNullOrEmpty(ParentTarget))
                 {
-                    return string.Empty;
+                    return null;
                 }
 
                 if (OriginalNode != null)

@@ -22,13 +22,11 @@
     <PackageVersion Include="DotUtils.StreamUtils.Sources" Version="0.0.8" />
     <PackageVersion Include="FluentAssertions" Version="6.12.0" />
     <PackageVersion Include="GuiLabs.Language.Xml" Version="1.2.93" />
-    <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
     <PackageVersion Include="Microsoft.Build" Version="$(MSBuildPackageVersion)" />
     <PackageVersion Include="Microsoft.Build.Framework" Version="$(MSBuildPackageVersion)" />
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.7.8" />
     <PackageVersion Include="Microsoft.Build.Tasks.Core" Version="$(MSBuildPackageVersion)" />
     <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="$(MSBuildPackageVersion)" />
-    <PackageVersion Include="Microsoft.DotNet.ILCompiler" Version="7.0.0" />
     <PackageVersion Include="Microsoft.IO.Redist" Version="6.1.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
     <!-- never update Cecil as this is the version required by Squirrel -->
