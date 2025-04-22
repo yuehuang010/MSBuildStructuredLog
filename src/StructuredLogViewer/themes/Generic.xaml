@@ -379,6 +379,7 @@
       <TextBlock Text="{Binding Name}" />
       <TextBlock x:Name="duration" Text="{Binding DurationText}" Margin="6,0,0,0" ToolTip="{Binding ToolTip}" />
       <controls:NodeHyperlinkControl
+            x:Name="hyperlink"
             Text="{Binding ParentTargetText}"
             Foreground="{DynamicResource TargetStroke}"
             ToolTip="{Binding ParentTargetTooltip}"

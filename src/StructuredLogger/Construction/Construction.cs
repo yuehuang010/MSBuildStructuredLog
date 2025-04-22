@@ -351,20 +351,11 @@ namespace Microsoft.Build.Logging.StructuredLogger
         {
             string targetName = Intern(args.TargetName);
             string messageText = args.Message;
-
             var originalBuildEventContext = args.OriginalBuildEventContext;
-            var skipReason = args.SkipReason;
-            if ((skipReason == TargetSkipReason.PreviouslyBuiltSuccessfully ||
-                skipReason == TargetSkipReason.PreviouslyBuiltUnsuccessfully) && originalBuildEventContext != null)
-            {
-                var prefix = "Target \"" + targetName + "\" "; // trim the Target Name text since the node will already display that
-                if (messageText.StartsWith(prefix, StringComparison.Ordinal))
-                {
-                    messageText = messageText.Substring(prefix.Length);
-                }
-            }
 
-            messageText = Intern(messageText);
+            bool addMessageAsAChildNode = true;
+
+            var skipReason = args.SkipReason;
 
             Target target = null;
 
@@ -384,46 +375,80 @@ namespace Microsoft.Build.Logging.StructuredLogger
                     args.BuildReason);
             }
 
+            Project originalProject = null;
+
+            // In case where target build results were retrieved from cache, and the original build
+            // happened in another build, the OriginalBuildEventContext will be invalid.
+            // Detect this case and don't create a link to the random unrelated project.
             if (originalBuildEventContext != null && originalBuildEventContext.ProjectContextId != BuildEventContext.InvalidProjectContextId)
             {
-                var originalProject = GetProject(originalBuildEventContext.ProjectContextId);
-                if (originalProject != null)
+                originalProject = GetProject(originalBuildEventContext.ProjectContextId);
+                if (originalProject != null && originalProject.ProjectInstanceId != originalBuildEventContext.ProjectInstanceId)
                 {
-                    target.ParentTarget = messageText;
-                    if (originalBuildEventContext.TargetId != -1 &&
-                        originalProject.GetTargetById(originalBuildEventContext.TargetId) is Target originalTarget)
-                    {
-                        target.OriginalNode = originalTarget;
-                    }
-                    else
-                    {
-                        // the original target was skipped because of false condition, so its target id == -1
-                        // Need to look it up by name, if unambiguous
-                        var candidates = originalProject
-                            .Children
-                            .OfType<Target>()
-                            .Where(t => t.Name == targetName)
-                            .ToArray();
-                        if (candidates.Length == 1)
-                        {
-                            originalTarget = candidates[0];
-                        }
-                        else
-                        {
-                            originalTarget = null;
-                        }
-
-                        target.OriginalNode = (TimedNode)originalTarget ?? originalProject;
-                    }
+                    originalProject = null;
+                    messageText = $"{messageText} Target results likely loaded from cache.";
                 }
             }
-            else
+
+            if (originalProject != null)
+            {
+                var originalNode = FindOriginalTarget(originalBuildEventContext.TargetId, originalProject, targetName);
+                if (originalNode != null && (originalNode is not Target || originalNode.Name == targetName))
+                {
+                    var prefix = "Target \"" + targetName + "\" "; // trim the Target Name text since the node will already display that
+                    if (messageText.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        messageText = messageText.Substring(prefix.Length);
+                    }
+
+                    target.OriginalNode = originalNode;
+                    target.ParentTarget = messageText;
+                    addMessageAsAChildNode = false;
+                }
+            }
+
+            messageText = Intern(messageText);
+
+            if (addMessageAsAChildNode)
             {
                 var messageNode = new Message { Text = messageText };
                 target.AddChild(messageNode);
             }
+            else
+            {
+                target.ParentTarget = messageText;
+            }
 
             target.Skipped = true;
+        }
+
+        private TimedNode FindOriginalTarget(int targetId, Project originalProject, string targetName)
+        {
+            if (targetId != -1 &&
+                originalProject.GetTargetById(targetId) is Target originalTarget)
+            {
+                return originalTarget;
+            }
+            else
+            {
+                // the original target was skipped because of false condition, so its target id == -1
+                // Need to look it up by name, if unambiguous
+                var candidates = originalProject
+                    .Children
+                    .OfType<Target>()
+                    .Where(t => t.Name == targetName)
+                    .ToArray();
+                if (candidates.Length == 1)
+                {
+                    originalTarget = candidates[0];
+                }
+                else
+                {
+                    originalTarget = null;
+                }
+
+                return (TimedNode)originalTarget ?? originalProject;
+            }
         }
 
         public void TaskStarted(object sender, TaskStartedEventArgs args)
@@ -589,7 +614,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                             AddPropertiesSorted(propertiesFolder, projectEvaluation, projectEvaluationFinished.Properties);
                             AddItems(itemsNode, projectEvaluationFinished.Items);
                         }
-                    } 
+                    }
                     else if (e is BuildCanceledEventArgs buildCanceledEventArgs)
                     {
                         // If the build was canceled we want to show a message in the build log view.
@@ -883,7 +908,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
 
                 node.AddChild(metadataFolder);
             }
-        }   
+        }
 
         private void HandleException(Exception ex)
         {
@@ -922,6 +947,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
             Project result = _projectIdToProjectMap.GetOrAdd(projectId,
                 id => CreateProject(id));
             result.NodeId = args.BuildEventContext.NodeId;
+            result.ProjectInstanceId = args.BuildEventContext.ProjectInstanceId;
 
             UpdateProject(result, args);
 
