@@ -244,6 +244,11 @@ namespace StructuredLogViewer
             return GetPreprocessedText(sourceFilePath, projectEvaluationContext, context: null);
         }
 
+        public string GetPreprocessedText(ProjectEvaluation evaluation)
+        {
+            return GetPreprocessedText(evaluation.SourceFilePath, GetEvaluationKey(evaluation));
+        }
+
         private string GetPreprocessedText(
             string sourceFilePath,
             string projectEvaluationContext,
@@ -262,12 +267,9 @@ namespace StructuredLogViewer
             }
 
             var importMap = GetImportMap(projectEvaluationContext);
-            if (importMap == null)
-            {
-                return string.Empty;
-            }
 
-            if (importMap.TryGetValue(sourceFilePath, out var imports) &&
+            if (importMap != null &&
+                importMap.TryGetValue(sourceFilePath, out var imports) &&
                 imports.Count > 0 &&
                 !string.IsNullOrWhiteSpace(sourceText.Text))
             {
@@ -294,7 +296,10 @@ namespace StructuredLogViewer
                     result = result.Substring(sourceText.Lines[0].Length);
                 }
 
-                context.Position += result.Length;
+                if (context != null)
+                {
+                    context.Position += result.Length;
+                }
             }
 
             preprocessedFileCache[preprocessedFileCacheKey] = result;
@@ -318,8 +323,31 @@ namespace StructuredLogViewer
 
             var importsList = imports.OrderBy(i => i.Line).ToList();
 
-            var sdkProps = importsList.FirstOrDefault(i => i.ProjectPath.EndsWith("Sdk.props", StringComparison.OrdinalIgnoreCase) && i.Line == 0 && i.Column == 0);
-            if (sdkProps != default)
+            var importsBefore = new List<ProjectImport>();
+            var importsAfter = new List<ProjectImport>();
+
+            foreach (var import in importsList.ToArray())
+            {
+                var projectPath = import.ProjectPath;
+                bool noLocation = import.Line == 0 && import.Column == 0;
+                if (noLocation)
+                {
+                    if (projectPath.EndsWith("Sdk.props", StringComparison.OrdinalIgnoreCase) ||
+                        projectPath.EndsWith(".ImportBefore.targets", StringComparison.OrdinalIgnoreCase))
+                    {
+                        importsBefore.Add(import);
+                        importsList.Remove(import);
+                    }
+                    else if (projectPath.EndsWith("Sdk.targets", StringComparison.OrdinalIgnoreCase) ||
+                        projectPath.EndsWith(".ImportAfter.targets", StringComparison.OrdinalIgnoreCase))
+                    {
+                        importsAfter.Add(import);
+                        importsList.Remove(import);
+                    }
+                }
+            }
+
+            if (importsBefore.Count > 0)
             {
                 while (sourceText.GetLineText(line) is string firstLine && !firstLine.Contains("<Project"))
                 {
@@ -329,14 +357,10 @@ namespace StructuredLogViewer
 
                 line = SkipTag(sourceText, sb, line, line, "<Project", ">", context);
 
-                InjectImportedProject(projectEvaluationContext, sb, sdkProps, context);
-                importsList.Remove(sdkProps);
-            }
-
-            var sdkTargets = importsList.FirstOrDefault(i => i.ProjectPath.EndsWith("Sdk.targets", StringComparison.OrdinalIgnoreCase) && i.Line == 0 && i.Column == 0);
-            if (sdkTargets != default)
-            {
-                importsList.Remove(sdkTargets);
+                foreach (var importBefore in importsBefore)
+                {
+                    InjectImportedProject(projectEvaluationContext, sb, importBefore, context);
+                }
             }
 
             foreach (var import in importsList)
@@ -352,10 +376,14 @@ namespace StructuredLogViewer
                 var lastLineText = sourceText.GetLineText(line);
                 if (lastLineText.Contains("</Project>"))
                 {
-                    if (sdkTargets != default)
+                    if (importsAfter.Count > 0)
                     {
-                        InjectImportedProject(projectEvaluationContext, sb, sdkTargets, context);
-                        sdkTargets = default;
+                        foreach (var importAfter in importsAfter)
+                        {
+                            InjectImportedProject(projectEvaluationContext, sb, importAfter, context);
+                        }
+
+                        importsAfter.Clear();
                     }
                 }
 

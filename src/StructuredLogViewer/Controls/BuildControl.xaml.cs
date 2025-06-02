@@ -51,7 +51,8 @@ namespace StructuredLogViewer.Controls
         private MenuItem goToTimeLineItem;
         private MenuItem goToTracingItem;
         private MenuItem copyChildrenItem;
-        private MenuItem sortChildrenItem;
+        private MenuItem sortChildrenByNameItem;
+        private MenuItem sortChildrenByDurationItem;
         private MenuItem filterChildrenItem;
         private MenuItem copyNameItem;
         private MenuItem copyValueItem;
@@ -217,7 +218,8 @@ namespace StructuredLogViewer.Controls
             goToTimeLineItem = new MenuItem() { Header = "Timeline" };
             goToTracingItem = new MenuItem() { Header = "Tracing" };
             copyChildrenItem = new MenuItem() { Header = "Copy children" };
-            sortChildrenItem = new MenuItem() { Header = "Sort children" };
+            sortChildrenByNameItem = new MenuItem() { Header = "Sort children by name" };
+            sortChildrenByDurationItem = new MenuItem() { Header = "Sort children by duration" };
             filterChildrenItem = new MenuItem() { Header = "Filter children (Ctrl+F)" };
             copyNameItem = new MenuItem() { Header = "Copy name" };
             copyValueItem = new MenuItem() { Header = "Copy value" };
@@ -255,7 +257,8 @@ namespace StructuredLogViewer.Controls
             goToTimeLineItem.Click += (s, a) => GoToTimeLine();
             goToTracingItem.Click += (s, a) => GoToTracing();
             copyChildrenItem.Click += (s, a) => CopyChildren();
-            sortChildrenItem.Click += (s, a) => SortChildren();
+            sortChildrenByNameItem.Click += (s, a) => SortChildrenByName();
+            sortChildrenByDurationItem.Click += (s, a) => SortChildrenByDuration();
             filterChildrenItem.Click += (s, a) => FilterChildren();
             copyNameItem.Click += (s, a) => CopyName();
             copyValueItem.Click += (s, a) => CopyValue();
@@ -313,7 +316,8 @@ namespace StructuredLogViewer.Controls
 
             contextMenu.AddItem(separator1);
 
-            contextMenu.AddItem(sortChildrenItem);
+            contextMenu.AddItem(sortChildrenByNameItem);
+            contextMenu.AddItem(sortChildrenByDurationItem);
             contextMenu.AddItem(filterChildrenItem);
             contextMenu.AddItem(hideItem);
 
@@ -390,6 +394,7 @@ Right-clicking a project node may show the 'Preprocess' option if the version of
 
             preprocessedFileManager = new PreprocessedFileManager(this.Build, sourceFileResolver);
             preprocessedFileManager.DisplayFile += filePath => DisplayFile(filePath);
+            Build.TargetGraphManager.TextProvider = evaluation => preprocessedFileManager.GetPreprocessedText(evaluation);
 
             navigationHelper = new NavigationHelper(Build, sourceFileResolver);
             navigationHelper.OpenFileRequested += filePath => DisplayFile(filePath);
@@ -460,7 +465,8 @@ Right-clicking a project node may show the 'Preprocess' option if the version of
             goToTimeLineItem = null;
             goToTracingItem = null;
             copyChildrenItem = null;
-            sortChildrenItem = null;
+            sortChildrenByNameItem = null;
+            sortChildrenByDurationItem = null;
             filterChildrenItem = null;
             copyNameItem = null;
             copyValueItem = null;
@@ -939,7 +945,8 @@ Recent (");
             copySubtreeItem.Visibility = hasChildrenVisibility;
             viewSubtreeTextItem.Visibility = hasChildrenVisibility;
             copyChildrenItem.Visibility = hasChildrenVisibility;
-            sortChildrenItem.Visibility = hasChildrenVisibility;
+            sortChildrenByNameItem.Visibility = hasChildrenVisibility;
+            sortChildrenByDurationItem.Visibility = hasChildrenVisibility;
             filterChildrenItem.Visibility = hasChildrenVisibility;
             preprocessItem.Visibility = node is IPreprocessable p && preprocessedFileManager.CanPreprocess(p) ? Visibility.Visible : Visibility.Collapsed;
             searchNuGetItem.Visibility = node is IProjectOrEvaluation ? Visibility.Visible : Visibility.Collapsed;
@@ -1335,6 +1342,24 @@ Recent (");
             {
                 yield return selectNode.Attributes["Name"].Value;
             }
+        }
+
+        public string TryFindDanglingTarget(Project project, string targetName)
+        {
+            if (project.GetEvaluation(Build) is ProjectEvaluation evaluation)
+            {
+                var graph = Build.TargetGraphManager.GetTargetGraph(evaluation);
+
+                var roots = project.EntryTargets != null && project.EntryTargets.Any()
+                    ? project.EntryTargets
+                    : graph.RootTargets;
+
+                var path = graph.FindPathFromEntryTargets(targetName, roots);
+                var result = string.Join(" → ", path.Reverse().Select(t => $"[{t.relationship}] {t.targetName}"));
+                return result;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -2106,12 +2131,21 @@ Recent (");
             }
         }
 
-        public void SortChildren()
+        public void SortChildrenByName()
         {
             var selectedItem = treeView.SelectedItem;
             if (selectedItem is TreeNode treeNode)
             {
                 treeNode.SortChildren();
+            }
+        }
+
+        public void SortChildrenByDuration()
+        {
+            var selectedItem = treeView.SelectedItem;
+            if (selectedItem is TreeNode treeNode)
+            {
+                treeNode.SortChildren(TreeNode.CompareByDuration);
             }
         }
 
@@ -2379,6 +2413,8 @@ Recent (");
                         }
 
                         break;
+                    case Target target when target.Parent is Folder:
+                        return SearchForTarget(target.Name);
                     case Target target:
                         return DisplayTarget(target.SourceFilePath, target.Name);
                     case Task task:
@@ -2482,6 +2518,21 @@ Recent (");
         private bool SearchForProject(string name)
         {
             var text = $"$projectreference project({name})";
+            searchLogControl.SearchText = text;
+            return true;
+        }
+
+        private bool SearchForTarget(string name)
+        {
+            string text = searchLogControl.SearchText;
+            var matcher = new NodeQueryMatcher(text);
+            string project = "";
+            if (matcher.ProjectMatchers.Count == 1)
+            {
+                project = $" project({matcher.ProjectMatchers[0].Query})";
+            }
+
+            text = $"$target \"{name}\"{project}";
             searchLogControl.SearchText = text;
             return true;
         }
@@ -2816,7 +2867,9 @@ Recent (");
                 {
                     Text = BinlogStats.GetString("Strings", recordStats.StringTotalSize, recordStats.StringCount, recordStats.StringLargest)
                 };
-                var allStringText = string.Join("\n", recordStats.AllStrings);
+                var allStringText = recordStats.AllStrings.Count > 0
+                    ? string.Join("\n", recordStats.AllStrings)
+                    : "Strings are not tracked for large binlogs";
                 var allStrings = new Message { Text = allStringText };
 
                 statsRoot.AddChild(strings);

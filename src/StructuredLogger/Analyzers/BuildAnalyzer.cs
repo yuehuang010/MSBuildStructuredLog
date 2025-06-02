@@ -39,6 +39,8 @@ namespace Microsoft.Build.Logging.StructuredLogger
             projectReferenceGraph = new ProjectReferenceGraph(build);
             build.FileCopyMap = fileCopyMap;
             build.ProjectReferenceGraph = projectReferenceGraph;
+            build.TargetGraphManager = new TargetGraphManager(build);
+            build.SearchExtensions.Add(build.TargetGraphManager);
             build.SearchExtensions.Add(fileCopyMap);
 
             if (build.EvaluationFolder != null)
@@ -315,6 +317,7 @@ namespace Microsoft.Build.Logging.StructuredLogger
                 if (evaluation != null)
                 {
                     project.TargetFramework = evaluation.TargetFramework;
+                    project.IsOuterProject = evaluation.IsOuterProject;
                     project.Platform = evaluation.Platform;
                     project.Configuration = evaluation.Configuration;
 
