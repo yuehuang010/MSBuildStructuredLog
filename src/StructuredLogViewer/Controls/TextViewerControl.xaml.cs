@@ -103,13 +103,22 @@ namespace StructuredLogViewer.Controls
             string text,
             int lineNumber = 0,
             int column = 0,
-            Action showPreprocessed = null,
+            string? actionName = null,
+            Action action = null,
             NavigationHelper navigationHelper = null)
         {
             this.FilePath = sourceFilePath;
-            this.Preprocess = showPreprocessed;
+            this.Preprocess = action;
 
-            preprocess.Visibility = showPreprocessed != null ? Visibility.Visible : Visibility.Collapsed;
+            if (action != null)
+            {
+                preprocess.Content = actionName ?? "Preprocess";
+                preprocess.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                preprocess.Visibility = Visibility.Collapsed;
+            }
 
             filePathText.Text = sourceFilePath;
 

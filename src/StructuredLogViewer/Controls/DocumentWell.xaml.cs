@@ -91,12 +91,29 @@ namespace StructuredLogViewer.Controls
             Visibility = Visibility.Collapsed;
         }
 
+        public void DisplayCommandLineDiffer(
+            string sourceFilePath,
+            string commandLineText)
+        {
+            var cmdDiff = new CommandLineDiffer();
+            cmdDiff.Initialize(commandLineText);
+
+            var tab = new SourceFileTab()
+            {
+                FilePath = sourceFilePath,
+                Text = commandLineText
+            };
+
+            AttachToTab(cmdDiff, tab);
+        }
+
         public void DisplaySource(
             string sourceFilePath,
             string text,
             int lineNumber = 0,
             int column = 0,
-            Action preprocess = null,
+            string? actionName = null,
+            Action action = null,
             NavigationHelper navigationHelper = null,
             EditorExtension editorExtension = null,
             bool displayPath = true)
@@ -123,7 +140,8 @@ namespace StructuredLogViewer.Controls
             }
 
             var textViewerControl = new TextViewerControl();
-            textViewerControl.DisplaySource(sourceFilePath, text, lineNumber, column, preprocess, navigationHelper);
+            textViewerControl.DisplaySource(sourceFilePath, text, lineNumber, column, actionName, action, navigationHelper);
+            textViewerControl.SetPathDisplay(displayPath);
 
             if (editorExtension != null)
             {
@@ -135,6 +153,12 @@ namespace StructuredLogViewer.Controls
                 FilePath = sourceFilePath,
                 Text = text
             };
+
+            AttachToTab(textViewerControl, tab);
+        }
+
+        private void AttachToTab(UserControl textViewerControl, SourceFileTab tab)
+        {
             var tabItem = new TabItem()
             {
                 Tag = tab,
@@ -147,7 +171,6 @@ namespace StructuredLogViewer.Controls
                 CloseTab(t);
             };
             tabItem.HeaderTemplate = (DataTemplate)Application.Current.Resources["SourceFileTabHeaderTemplate"];
-            textViewerControl.SetPathDisplay(displayPath);
 
             Tabs.Add(tabItem);
             tabControl.SelectedItem = tabItem;

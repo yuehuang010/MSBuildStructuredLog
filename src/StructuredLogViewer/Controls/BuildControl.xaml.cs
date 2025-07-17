@@ -20,6 +20,7 @@ using Microsoft.Build.Logging.StructuredLogger;
 using Microsoft.Language.Xml;
 using Mono.Cecil;
 using StructuredLogViewer.Core.ProjectGraph;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 using TPLTask = System.Threading.Tasks.Task;
 
 namespace StructuredLogViewer.Controls
@@ -2047,7 +2048,7 @@ Recent (");
 
             var items = selectedItem.EnumerateSiblingsCycle();
 
-        search:
+search:
             foreach (var item in items)
             {
                 var text = GetText(item);
@@ -2654,6 +2655,11 @@ Recent (");
             switch (treeNode)
             {
                 case NameValueNode nameValueNode when nameValueNode.IsValueShortened:
+                    if (nameValueNode.Name == Strings.CommandLineArguments)
+                    {
+                        return DisplayCommandLine(nameValueNode.Value, nameValueNode.Name);
+                    }
+
                     return DisplayText(nameValueNode.Value, nameValueNode.Name);
                 case TextNode textNode when textNode.IsTextShortened:
                     return DisplayText(textNode.Text, textNode.ShortenedText ?? textNode.TypeName);
@@ -2868,6 +2874,7 @@ Recent (");
                 text.Text,
                 lineNumber,
                 column,
+                null,
                 preprocess,
                 navigationHelper,
                 editorExtension);
@@ -2878,6 +2885,16 @@ Recent (");
         {
             caption = TextUtilities.SanitizeFileName(caption);
             documentWell.DisplaySource(caption ?? "Text", text, displayPath: false);
+            return true;
+        }
+
+        public bool DisplayCommandLine(string commandline, string title)
+        {
+            title = TextUtilities.SanitizeFileName(title);
+            documentWell.DisplaySource(title,
+                commandline,
+                actionName: "Compare",
+                action: () => { documentWell.DisplayCommandLineDiffer(title, commandline); }, displayPath: false);
             return true;
         }
 
