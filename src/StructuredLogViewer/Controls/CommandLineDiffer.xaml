@@ -16,23 +16,12 @@
             <RowDefinition />
         </Grid.RowDefinitions>
 
-        <DockPanel Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" x:Name="filePathToolbar">
-            <!--<Button x:Name="CompareNow"
-               Content="Compare"
-               Padding="6,3,6,3"
-               Click="compare_Click"
-               BorderThickness="0"
-               Background="Transparent"
-               VerticalAlignment="Center"
-               DockPanel.Dock="Left"
-               ToolTip="Compare command line."/>
-            <CheckBox x:Name="wordWrap" 
+        <DockPanel Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" x:Name="topMenuBar">
+            <CheckBox x:Name="caseSensitiveCheckBox" 
                Margin="4"
                VerticalAlignment="Center"
                DockPanel.Dock="Left"
-               Content="Word Wrap"
-               Checked="wordWrap_Checked"
-               Unchecked="wordWrap_Unchecked"/>-->
+               Content="Case Sensitive" />
         </DockPanel>
 
         <a:TextEditor x:Name="textEditorLeft"
@@ -51,6 +40,25 @@
                  FontSize="14">
         </a:TextEditor>
 
+        <DockPanel Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" x:Name="middleMenuBar">
+            <Button x:Name="CompareNow"
+               Content="Compare"
+               Padding="6,3,6,3"
+               Click="CompareNow_Click"
+               BorderThickness="0"
+               Background="Transparent"
+               VerticalAlignment="Center"
+               DockPanel.Dock="Left"
+               ToolTip="Compare command lines."/>
+            <!--<CheckBox x:Name="wordWrap" 
+               Margin="4"
+               VerticalAlignment="Center"
+               DockPanel.Dock="Left"
+               Content="Word Wrap"
+               Checked="wordWrap_Checked"
+               Unchecked="wordWrap_Unchecked"/>-->
+        </DockPanel>
+        
         <a:TextEditor x:Name="textEditorResult"
                  FontFamily="Consolas"
                  Grid.Row="3"
