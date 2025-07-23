@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Linq;
-using System.Runtime.InteropServices;
-using StructuredLogViewer;
 using Xunit;
 
 namespace StructuredLogger.Tests
@@ -40,6 +35,9 @@ namespace StructuredLogger.Tests
         [InlineData(@"csc.exe source1.cs source2.cs", @"csc.exe source2.cs source1.cs")]
         [InlineData(@"csc.exe -switch1 -switch2", @"csc.exe -switch2 -switch1")]
         [InlineData(@"csc.exe -switch1 -switch2", @"csc.exe -switch2 -switch1 -switch3", @"-switch3")]
+        [InlineData(@"csc.exe -switch1 -switch1", @"csc.exe -switch1 -switch1 -switch1", @"-switch1")]
+        [InlineData(@"csc.exe file.txt file.txt", @"csc.exe file.txt file.txt file.txt", @"file.txt")]
+        [InlineData(@"csc.exe file.txt file.txt file.txt", @"csc.exe file.txt file.txt", @"file.txt")]
         public void CompareDifferent(string leftString, string rightString, params string[] expected)
         {
             var result = CommandLineDiffer.TryCompare(leftString, rightString, out var leftRemainder, out var rightRemainder);
@@ -75,6 +73,8 @@ namespace StructuredLogger.Tests
         [InlineData(@"""one""", @"one")]
         [InlineData(@"""one two""", @"one two")]
         [InlineData(@"one two", @"one", @"two")]
+        [InlineData(@"one two three", @"one", @"two", @"three")]
+        [InlineData(@"""one two"" three", @"one two", @"three")]
         public void ParseParameters(string testString, params string[] expected)
         {
             var actual = CommandLineDiffer.ParseParameters(testString, 0);
@@ -88,11 +88,13 @@ namespace StructuredLogger.Tests
         }
 
         [Theory]
-        [InlineData(@"csc.exe", true, "csc.exe")]
-        [InlineData(@"""folder\csc.exe""", true, @"folder\csc.exe")]
-        [InlineData(@"C:\Program Folder(x86)\folder\csc.exe", true, @"C:\Program Folder(x86)\folder\csc.exe")]
-        [InlineData(@"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe", true, @"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe")]
-        [InlineData(@"""C:\Program Folder(x86)\folder\csc.exe""", true, @"C:\Program Folder(x86)\folder\csc.exe")]
+        [InlineData(@"csc.exe -switch", true, "csc.exe")]
+        [InlineData(@"""csc.exe", false, "")]  // missing closing quote
+        [InlineData(@"""csc.exe -switch", false, "")] // missing closing quote
+        [InlineData(@"""folder\csc.exe"" -switch", true, @"folder\csc.exe")]
+        [InlineData(@"C:\Program Folder(x86)\folder\csc.exe -switch", true, @"C:\Program Folder(x86)\folder\csc.exe")]
+        [InlineData(@"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe -switch", true, @"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe")]
+        [InlineData(@"""C:\Program Folder(x86)\folder\csc.exe"" -switch", true, @"C:\Program Folder(x86)\folder\csc.exe")]
         public void ProgramPaths(string testString, bool expected, string expectedOutput)
         {
             bool result = CommandLineDiffer.TryParseExe(testString, out string actualOutput);

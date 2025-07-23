@@ -2662,6 +2662,15 @@ search:
 
                     return DisplayText(nameValueNode.Value, nameValueNode.Name);
                 case TextNode textNode when textNode.IsTextShortened:
+                    if (textNode.Text.StartsWith(Strings.CommandLineArguments))
+                    {
+                        // Search panel stores the Command Line as ProxyNode/TextNode.
+                        if (textNode is ProxyNode proxyNode && proxyNode.OriginalType == Strings.Property && proxyNode.Original is Property property)
+                        {
+                            return DisplayCommandLine(property.Value, Strings.CommandLineArguments);
+                        }
+                    }
+
                     return DisplayText(textNode.Text, textNode.ShortenedText ?? textNode.TypeName);
                 case NamedNode namedNode when namedNode.IsNameShortened:
                     return DisplayText(namedNode.Name, namedNode.ShortenedName ?? namedNode.TypeName);

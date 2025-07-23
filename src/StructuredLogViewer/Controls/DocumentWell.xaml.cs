@@ -95,7 +95,7 @@ namespace StructuredLogViewer.Controls
             string sourceFilePath,
             string commandLineText)
         {
-            var cmdDiff = new CommandLineDiffer();
+            var cmdDiff = new CommandLineDiffControl();
             cmdDiff.Initialize(commandLineText);
 
             var tab = new SourceFileTab()

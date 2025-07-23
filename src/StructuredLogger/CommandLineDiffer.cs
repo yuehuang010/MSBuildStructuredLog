@@ -41,8 +41,56 @@ namespace StructuredLogger
             return c;
         }
 
-        public static List<string> ParseParameters(string cmdLine, int startIndex)
+
+        public static int GetIndexOfFirstDifference(string str1, string str2, bool caseSensitive)
         {
+            int minLength = Math.Min(str1.Length, str2.Length);
+
+            for (int i = 0; i < minLength; i++)
+            {
+                if (caseSensitive && str1[i] != str2[i])
+                {
+                    return i;
+                }
+                else if (!caseSensitive && char.ToLowerInvariant(str1[i]) != char.ToLowerInvariant(str2[i]))
+                {
+                    return i;
+                }
+            }
+
+            // If one string is longer than the other, the difference starts at the end of the shorter string
+            if (str1.Length != str2.Length)
+            {
+                return minLength;
+            }
+
+            // No differences found
+            return -1;
+        }
+
+
+        public static int CountOccurrences(string input, string target, int endIndex = -1)
+        {
+            if (endIndex >= input.Length && endIndex < 0) { endIndex = input.Length - 1; } // Ensure index is within bounds
+            int count = 0;
+
+            int startIndex = 0;
+            while (startIndex < input.Length && startIndex < endIndex)
+            {
+                startIndex = input.IndexOf(target, startIndex);
+                if (startIndex == -1 || startIndex >= endIndex)
+                    break;
+
+                count++;
+                startIndex += target.Length;
+            }
+
+            return count;
+        }
+
+        public static List<string> ParseParameters(string cmdLine, int startIndex, CommandLineDiffSetting setting = null)
+        {
+            setting ??= CommandLineDiffSetting.Default;
             var parameters = new List<string>();
             bool inQuotes = false;
             char escapeChar = '\\';
@@ -86,8 +134,9 @@ namespace StructuredLogger
             return parameters;
         }
 
-        public static bool TryParseExe(string commandLine, out string program)
+        public static bool TryParseExe(string commandLine, out string program, CommandLineDiffSetting setting = null)
         {
+            setting ??= CommandLineDiffSetting.Default;
             program = "";
 
             char c = GetNextLetter(commandLine, 0, out int startIndex);
@@ -96,12 +145,17 @@ namespace StructuredLogger
             if (c == '\"')
             {
                 int endIndex = commandLine.IndexOf('\"', startIndex + 1);
-                program = commandLine.Substring(startIndex + 1, endIndex - 1 - startIndex);
-                return true;
+                if (endIndex != -1)
+                {
+                    program = commandLine.Substring(startIndex + 1, (endIndex - 1) - startIndex);
+                    return true;
+                }
+
+                return false;
             }
 
             {
-                int endIndex = commandLine.IndexOf(".exe");
+                int endIndex = commandLine.IndexOf(".exe", setting.ToStringComparison);
                 if (endIndex != -1)
                 {
                     program = commandLine.Substring(startIndex, (endIndex + 4) - startIndex);
@@ -112,18 +166,19 @@ namespace StructuredLogger
             return false;
         }
 
-        public static bool TryParseCommandLine(string commandLine, out List<string> result)
+        public static bool TryParseCommandLine(string commandLine, out List<string> result, CommandLineDiffSetting setting = null)
         {
+            setting ??= CommandLineDiffSetting.Default;
             result = new List<string>();
             int startIndex = 0;
 
-            if (TryParseExe(commandLine, out string program))
+            if (TryParseExe(commandLine, out string program, setting))
             {
                 startIndex = program.Length + 1;
                 result.Add(program);
             }
 
-            var paramResult = ParseParameters(commandLine, startIndex);
+            var paramResult = ParseParameters(commandLine, startIndex, setting);
             result.AddRange(paramResult);
 
             return true;
@@ -170,12 +225,23 @@ namespace StructuredLogger
             }
         }
 
-        public static bool TryCompare(string left, string right, out List<string> leftRemainder, out List<string> rightRemainder)
+        public class CommandLineDiffSetting
         {
+            public static readonly CommandLineDiffSetting Default = new CommandLineDiffSetting();
+
+            public bool CaseSensitive { get; set; } = true;
+
+            public StringComparison ToStringComparison => CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+        }
+
+        public static bool TryCompare(string left, string right, out List<string> leftRemainder, out List<string> rightRemainder, CommandLineDiffSetting setting = null)
+        {
+            setting ??= CommandLineDiffSetting.Default;
             leftRemainder = new List<string>();
             rightRemainder = new List<string>();
 
-            if (!TryParseCommandLine(left, out var cmdLeft) || !TryParseCommandLine(right, out var cmdRight))
+            if (!TryParseCommandLine(left, out var cmdLeft, setting) || !TryParseCommandLine(right, out var cmdRight, setting))
             {
                 return false;
             }
@@ -187,9 +253,9 @@ namespace StructuredLogger
 
             for (int i = 0; i < leftParams.Count; i++)
             {
-                if (i < rightParams.Count && leftParams[i].Parameter == rightParams[i].Parameter)
+                if (i < rightParams.Count && leftParams[i].Parameter.Equals(rightParams[i].Parameter, setting.ToStringComparison))
                 {
-                    if (leftParams[i].Prefix == rightParams[i].Prefix)
+                    if (leftParams[i].Prefix.Equals(rightParams[i].Prefix, setting.ToStringComparison))
                     {
                         leftParams[i].Matched = true;
                         rightParams[i].Matched = true;
@@ -207,9 +273,9 @@ namespace StructuredLogger
                 for (int j = 0; j < rightParamRemainder.Count; j++)
                 {
                     if (!rightParamRemainder[j].Matched &&
-                        leftParamRemainder[i].Parameter == rightParamRemainder[j].Parameter)
+                        leftParamRemainder[i].Parameter.Equals(rightParamRemainder[j].Parameter, setting.ToStringComparison))
                     {
-                        if (leftParamRemainder[i].Prefix == rightParamRemainder[j].Prefix)
+                        if (leftParamRemainder[i].Prefix.Equals(rightParamRemainder[j].Prefix, setting.ToStringComparison))
                         {
                             leftParamRemainder[i].Matched = true;
                             rightParamRemainder[j].Matched = true;
@@ -225,7 +291,7 @@ namespace StructuredLogger
                 for (int j = 0; j < rightParamRemainder.Count; j++)
                 {
                     if (!rightParamRemainder[j].Matched &&
-                        leftParamRemainder[i].Parameter == rightParamRemainder[j].Parameter)
+                        leftParamRemainder[i].Parameter.Equals(rightParamRemainder[j].Parameter, setting.ToStringComparison))
                     {
                         leftParamRemainder[i].Matched = true;
                         rightParamRemainder[j].Matched = true;
