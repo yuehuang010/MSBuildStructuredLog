@@ -107,10 +107,10 @@ namespace StructuredLogViewer.Controls
                     if (startIndex < 0) { startIndex = 0; }
 
                     int endIndexLeft = indexOfDiff + suffixChars;
-                    if (endIndexLeft > leftCombined.Length) { endIndexLeft = leftCombined.Length - 1; }
+                    if (endIndexLeft > leftCombined.Length) { endIndexLeft = leftCombined.Length; }
 
                     int endIndexRight = indexOfDiff + suffixChars;
-                    if (endIndexRight > rightCombined.Length) { endIndexRight = rightCombined.Length - 1; }
+                    if (endIndexRight > rightCombined.Length) { endIndexRight = rightCombined.Length; }
 
                     int lineIndexOfDiff = CommandLineDiffer.GetIndexOfFirstDifference(left, right, setting.CaseSensitive);
                     int lineOfDiffLeft = CommandLineDiffer.CountOccurrences(left, Environment.NewLine, lineIndexOfDiff);

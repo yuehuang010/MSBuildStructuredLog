@@ -2665,7 +2665,9 @@ search:
                     if (textNode.Text.StartsWith(Strings.CommandLineArguments))
                     {
                         // Search panel stores the Command Line as ProxyNode/TextNode.
-                        if (textNode is ProxyNode proxyNode && proxyNode.OriginalType == Strings.Property && proxyNode.Original is Property property)
+                        if (textNode is ProxyNode proxyNode &&
+                            proxyNode.OriginalType == Strings.Property &&
+                            proxyNode.Original is Property property)
                         {
                             return DisplayCommandLine(property.Value, Strings.CommandLineArguments);
                         }
@@ -2884,6 +2886,7 @@ search:
                 lineNumber,
                 column,
                 null,
+                null,
                 preprocess,
                 navigationHelper,
                 editorExtension);
@@ -2897,13 +2900,17 @@ search:
             return true;
         }
 
-        public bool DisplayCommandLine(string commandline, string title)
+        public bool DisplayCommandLine(string commandLine, string title)
         {
             title = TextUtilities.SanitizeFileName(title);
+            int hash = TextUtilities.GetHashCode(title, commandLine);
             documentWell.DisplaySource(title,
-                commandline,
+                commandLine,
                 actionName: "Compare",
-                action: () => { documentWell.DisplayCommandLineDiffer(title, commandline); }, displayPath: false);
+                actionToolTip: "Open command line comparison tool",
+                action: () => { documentWell.DisplayCommandLineDiffer("Command Line Diff Tool", commandLine); },
+                displayPath: false,
+                tabHash: hash);
             return true;
         }
 

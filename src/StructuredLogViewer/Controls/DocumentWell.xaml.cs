@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using Microsoft.Build.Logging.StructuredLogger;
 
 namespace StructuredLogViewer.Controls
 {
@@ -76,9 +77,9 @@ namespace StructuredLogViewer.Controls
 
         public ObservableCollection<TabItem> Tabs { get; } = new ObservableCollection<TabItem>();
 
-        public TabItem Find(string filePath)
+        public TabItem Find(string filePath, int hash)
         {
-            return Tabs.FirstOrDefault(t => t.Tag is SourceFileTab s && string.Equals(s.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            return Tabs.FirstOrDefault(t => t.Tag is SourceFileTab s && string.Equals(s.FilePath, filePath, StringComparison.OrdinalIgnoreCase) && (hash == 0 || hash == s.HashCode));
         }
 
         public void CloseAllTabs()
@@ -101,7 +102,8 @@ namespace StructuredLogViewer.Controls
             var tab = new SourceFileTab()
             {
                 FilePath = sourceFilePath,
-                Text = commandLineText
+                Text = commandLineText,
+                HashCode = TextUtilities.GetHashCode(sourceFilePath, commandLineText),
             };
 
             AttachToTab(cmdDiff, tab);
@@ -113,12 +115,14 @@ namespace StructuredLogViewer.Controls
             int lineNumber = 0,
             int column = 0,
             string? actionName = null,
+            string? actionToolTip = null,
             Action action = null,
             NavigationHelper navigationHelper = null,
             EditorExtension editorExtension = null,
-            bool displayPath = true)
+            bool displayPath = true,
+            int tabHash = 0)
         {
-            var existing = Find(sourceFilePath);
+            var existing = Find(sourceFilePath, tabHash);
             if (existing != null)
             {
                 Visibility = Visibility.Visible;
@@ -140,7 +144,7 @@ namespace StructuredLogViewer.Controls
             }
 
             var textViewerControl = new TextViewerControl();
-            textViewerControl.DisplaySource(sourceFilePath, text, lineNumber, column, actionName, action, navigationHelper);
+            textViewerControl.DisplaySource(sourceFilePath, text, lineNumber, column, actionName, actionToolTip, action, navigationHelper);
             textViewerControl.SetPathDisplay(displayPath);
 
             if (editorExtension != null)
@@ -151,7 +155,8 @@ namespace StructuredLogViewer.Controls
             var tab = new SourceFileTab()
             {
                 FilePath = sourceFilePath,
-                Text = text
+                Text = text,
+                HashCode = tabHash,
             };
 
             AttachToTab(textViewerControl, tab);

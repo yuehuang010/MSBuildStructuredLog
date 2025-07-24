@@ -104,6 +104,7 @@ namespace StructuredLogViewer.Controls
             int lineNumber = 0,
             int column = 0,
             string? actionName = null,
+            string? actionToolTip = null,
             Action action = null,
             NavigationHelper navigationHelper = null)
         {
@@ -113,6 +114,7 @@ namespace StructuredLogViewer.Controls
             if (action != null)
             {
                 preprocess.Content = actionName ?? "Preprocess";
+                preprocess.ToolTip = actionToolTip ?? "Show preprocessed project with all imports inlined";
                 preprocess.Visibility = Visibility.Visible;
             }
             else
